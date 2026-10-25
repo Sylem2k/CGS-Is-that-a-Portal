@@ -25,7 +25,11 @@ GenericEntity {
    m_bUseSafePlayerTeleport 1
    m_bPreserveMomentum 1
    m_fMomentumMultiplier 1
-   m_fMaxExitSpeed 45
+   m_fMaxExitSpeed 30
+   m_bSimulateMomentum 1
+   m_fMomentumCarrySeconds 4
+   m_fMomentumGravity 9.81
+   m_fMomentumMaxStep 0.7
   }
   MeshObject "{6AB21D04ECC6E03E}" {
    Object "{654C96CCE67E3142}Common/Models/Portal_Test_Blue.xob"
