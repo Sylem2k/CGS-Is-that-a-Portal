@@ -8,6 +8,11 @@ class CGS_PortalComponent : ScriptComponent
 	[Attribute("0", UIWidgets.EditBox, "Portal identity: 0 = Blue, 1 = Orange")]
 	protected int m_iPortalID;
 
+	// 0 = manually placed legacy test portal; >0 = owner player's ID.
+	// Runtime-spawned gun portals get assigned immediately after spawn.
+	[Attribute("0", UIWidgets.EditBox, "Portal owner player ID. 0 = shared test portal")]
+	protected int m_iPortalOwnerID;
+
 	[Attribute("1", UIWidgets.CheckBox, "Enable this portal")]
 	protected bool m_bEnabled;
 
@@ -125,6 +130,32 @@ class CGS_PortalComponent : ScriptComponent
 	bool IsDebugEnabled()
 	{
 		return m_bDebug;
+	}
+
+	int GetPortalOwnerID()
+	{
+		return m_iPortalOwnerID;
+	}
+
+	// Must be called on server immediately after spawning the prefab.
+	// Move registration from the temporary world pair to this player's pair.
+	void SetPortalOwnerID(int ownerPlayerId)
+	{
+		if (!Replication.IsServer() || ownerPlayerId < 1)
+			return;
+
+		CGS_PortalManagerComponent.UnregisterPortal(this);
+		m_iPortalOwnerID = ownerPlayerId;
+		CGS_PortalManagerComponent.RegisterPortal(this);
+		if (m_bDebug)
+			PrintFormat("[CGS PORTAL OWNER] Portal color=%1 registered to player=%2", m_iPortalID, m_iPortalOwnerID);
+	}
+
+	override void OnDelete(IEntity owner)
+	{
+		if (Replication.IsServer())
+			CGS_PortalManagerComponent.UnregisterPortal(this);
+		super.OnDelete(owner);
 	}
 
 	override void OnPostInit(IEntity owner)
@@ -298,6 +329,9 @@ class CGS_PortalComponent : ScriptComponent
 
 		if (m_bShowFacingArrow)
 			DrawFacingDebug(owner);
+
+		if (Replication.IsServer())
+			CGS_PortalManagerComponent.CleanupDisconnectedPlayers();
 
 		if (!Replication.IsServer() || !m_bEnabled)
 			return;

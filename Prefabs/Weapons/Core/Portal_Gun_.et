@@ -117,6 +117,14 @@ GenericEntity {
     }
    }
   }
+  CGS_PortalGunComponent "{6AB21D161F2E7461}" {
+   m_sBluePortalPrefab "{E5DA100433B35A4E}Prefabs/Weapons/Core/Blue_Portal.et"
+   m_sOrangePortalPrefab "{EA7C0FE5E8E2E3C0}Prefabs/Weapons/Core/Orange_Portal.et"
+   m_fShotDistance 90
+   m_fSurfaceOffset 0.04
+   m_iShotCooldownMs 200
+   m_bDebug 1
+  }
   NwkPhysicsMovementComponent "{6AB21D161F2E7321}" {
   }
   RplComponent "{6AB21D161F2E7324}" {
