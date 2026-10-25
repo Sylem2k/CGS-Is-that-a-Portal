@@ -144,7 +144,7 @@ class CGS_PortalManagerComponent : ScriptComponent
 		playerManager.GetPlayers(online);
 
 		ref array<int> disconnected = {};
-		foreach (int playerId, ref CGS_PortalPlayerPair pair : s_mPlayerPairs)
+		foreach (int playerId, CGS_PortalPlayerPair pair : s_mPlayerPairs)
 		{
 			if (!online.Contains(playerId))
 				disconnected.Insert(playerId);
