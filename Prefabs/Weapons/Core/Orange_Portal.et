@@ -3,6 +3,7 @@ GenericEntity {
  components {
   CGS_PortalComponent "{6AB20E69C3F376C5}" {
    m_iPortalID 1
+   m_iFacingAxis 1
    m_bEnabled 1
    m_fExitOffset 2.5
    m_fActivationDistance 2
