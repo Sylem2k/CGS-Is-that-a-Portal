@@ -1,4 +1,6 @@
 // Inherited pink skin appearance for Head_Black_02.
+// IMPORTANT: the actual XOB material slots are named Head_African_02,
+// although its prefab/model path is Head_Black_02.
 // Preserves native head/face rig, eye materials, animation and attachments.
 // Set during identity prefab instantiation, NOT by SetObject() on a live head.
 GameEntity : "{04F4D8CBA36A534B}Prefabs/Characters/Heads/Head_Black_02.et" {
@@ -7,11 +9,11 @@ GameEntity : "{04F4D8CBA36A534B}Prefabs/Characters/Heads/Head_Black_02.et" {
   MeshObject "{529C8934211B4893}" {
    Materials {
     MaterialAssignClass "{6AB2F1A000000441}" {
-     SourceMaterial "Head_Black_02"
+     SourceMaterial "Head_African_02"
      AssignedMaterial "{6AB2F1A000000100}Common/Models/Data/CGS_Pinkifier_Pink.emat"
     }
     MaterialAssignClass "{6AB2F1A000000442}" {
-     SourceMaterial "Head_Black_02_wound"
+     SourceMaterial "Head_African_02_wound"
      AssignedMaterial "{6AB2F1A000000100}Common/Models/Data/CGS_Pinkifier_Pink.emat"
     }
     MaterialAssignClass "{6AB2F1A000000443}" {
