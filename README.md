@@ -834,3 +834,30 @@ I reused my existing `Portal_Gun.xob`, basic pistol handling/IK, inventory picku
 - The Pinkifier is a separate, Workbench-placeable prefab. Registering it in every Game Master inventory/arsenal category is a separate step if I want it distributed through those catalogs.
 
 **Status:** Source and prefab are pushed for Workbench testing, but I have not claimed to verify compilation, actual character painting or multiplayer replication.
+
+
+## Phase 2.5a — Fix Pinkifier game crash on shooting characters
+
+I tested the first Pinkifier prototype. The Pinkifier weapon equipped and was able to shoot, but **the game crashed when the pink material was applied to the character**.
+
+I reviewed the actual broadcast path in `CGS_PortalPlayerController.c` and found that it called `SCR_Global.SetMaterial(character, pinkMaterial, true)`. In stock Reforger this helper loops through the entity's VObject material slots and **calls `entity.SetObject(mesh, "$remap ...")`**, then recursively repeats this for all child entities. That was too aggressive for a live animated character carrying clothes, weapons, equipment and an inventory. A native crash is plausible. I cannot prove this was the only underlying cause without the crash dump.
+
+### What I changed
+
+- **Removed the recursive mesh/material replacement from the Pinkifier hit broadcast.** The new code NEVER calls `SCR_Global.SetMaterial` or `SetObject` on the target character hierarchy.
+- Added `Scripts/Game/CGS_Portal/CGS_PinkVisuals.c`. It checks whether the character or EQUIPPED clothing has the built-in `ParametricMaterialInstanceComponent`. If available, it calls the documented `SetColor(Color.PINK)` to tint the existing material INSTANCE without replacing the 3D object/material resource, inventory, hit zones or animation skeleton.
+- I intentionally limit the tint to the character and seven known equipped clothing areas: jacket, pants, vest, head cover, boots, gloves and backpack. I do NOT recurse through the thousands of possible child/inventory entities or touch dynamically added objects.
+- The code logs exactly how many eligible material components it found and tinted. Custom clothing without a parametric color component is skipped, with a warning. Some outfits may not visually tint until I implement a safe explicit character material solution, but the game should no longer be exposed to mass VObject remapping.
+- Server shot validation, zero-damage trace, RplId-based broadcast, Pinkifier weapon prefab, gun material, and the original Portal Gun's Blue/Orange scripts remain the same.
+
+### My Workbench test order
+
+1. Pull PR #27, compile Game scripts and check the Pinkifier and Portal Gun still equip.
+2. Shoot ONE AI soldier with the Pinkifier while monitoring log. Expected: `[CGS PINKIFIER SAFE] Color applied to N material-instance component(s), M equipped clothing slot(s) found. No VObject remaps.` Followed by `[CGS PINKIFIER] SAFE paint applied` only when N > 0.
+3. Confirm the target stays alive and the game doesn't crash. Check visually which clothing pieces turned pink. If none turn pink, record `N`, `M` and the target's outfit prefab; do not go back to recursive mesh replacement.
+4. With two players, confirm that the server paint RPC is visible locally on connected clients. Late-join state is still not persisted.
+5. Test the original CGS Portal Gun's LMB Blue / MMB Orange, PiP and teleportation after the Pinkifier test.
+
+### Limitations and follow-up
+
+This is a **source-level crash mitigation, not yet compiled or game-tested**. The original crash stack/dump was not available, so I treat recursive remapping as the strongest suspect rather than a confirmed engine root cause. Material-instance tinting may not affect every standard or modded uniform if its shader does not expose a compatible color parameter. I will use the actual Workbench result to determine whether we need a character-safe palette/overlay approach. I will not sacrifice server stability to force every piece of clothing to turn pink.
