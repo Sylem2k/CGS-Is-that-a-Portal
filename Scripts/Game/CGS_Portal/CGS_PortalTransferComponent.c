@@ -9,7 +9,7 @@ class CGS_PortalTransferComponent : ScriptComponent
 	protected static int s_iDebugTransfers;
 
 	// Phase 1.3: only player characters. No vehicles or ragdolls yet.
-	static bool TryTransfer(IEntity character, CGS_PortalComponent source, CGS_PortalComponent destination)
+	static bool TryTransfer(IEntity character, CGS_PortalComponent source, CGS_PortalComponent destination, int playerId)
 	{
 		if (!Replication.IsServer() || !character || !source || !destination)
 			return false;
@@ -109,17 +109,34 @@ class CGS_PortalTransferComponent : ScriptComponent
 		character.GetWorldTransform(characterMatrix);
 		characterMatrix[3] = destinationPosition;
 
-		BaseGameEntity gameEntity = BaseGameEntity.Cast(character);
-		if (gameEntity)
-			gameEntity.Teleport(characterMatrix);
+		// Reforger's stock player teleport code resets residual physics
+		// velocity. During early floor/ceiling testing this may be safer
+		// than trying to alter a non-dynamic character physics body.
+		// The portal still preserves the optional lateral destination offset.
+		bool safeMode = destination.GetUseSafePlayerTeleport();
+		if (safeMode)
+		{
+			if (!SCR_Global.TeleportPlayer(playerId, destinationPosition))
+			{
+				if (source.IsDebugEnabled() || destination.IsDebugEnabled())
+					PrintFormat("[CGS PORTAL PHYSICS] SAFE teleport rejected for player=%1 exit=%2", playerId, destinationPosition);
+				return false;
+			}
+		}
 		else
-			character.SetWorldTransform(characterMatrix);
+		{
+			BaseGameEntity gameEntity = BaseGameEntity.Cast(character);
+			if (gameEntity)
+				gameEntity.Teleport(characterMatrix);
+			else
+				character.SetWorldTransform(characterMatrix);
+		}
 
 		bool velocityApplied = false;
-		if (destination.ShouldPreserveMomentum() && physics && physics.IsDynamic())
+		if (!safeMode && destination.ShouldPreserveMomentum() && physics && physics.IsDynamic())
 		{
-			// Experimental: on some character controllers Physics.SetVelocity
-			// may not control actual movement even when a physics body exists.
+			// Physics.SetVelocity works on a dynamic rigid body, not on
+			// ordinary Reforger characters with physics.IsDynamic() false.
 			physics.SetVelocity(outgoingVelocity);
 			velocityApplied = true;
 		}
@@ -132,7 +149,7 @@ class CGS_PortalTransferComponent : ScriptComponent
 			if (s_iDebugTransfers <= 3 || s_iDebugTransfers % 10 == 0)
 			{
 				PrintFormat("[CGS PORTAL PHYSICS] Transfer #%1 %2 -> %3 exit=%4 exitNormal=%5", s_iDebugTransfers, source.GetPortalID(), destination.GetPortalID(), destinationPosition, exitNormal);
-				PrintFormat("[CGS PORTAL PHYSICS] incoming=%1 outgoing=%2 momentumWanted=%3 physicsApplied=%4", incomingVelocity, outgoingVelocity, destination.ShouldPreserveMomentum(), velocityApplied);
+				PrintFormat("[CGS PORTAL PHYSICS] incoming=%1 outgoing=%2 safePlayerTeleport=%3 velocityApplied=%4", incomingVelocity, outgoingVelocity, safeMode, velocityApplied);
 				if (physics)
 					PrintFormat("[CGS PORTAL PHYSICS] Character physics exists; dynamic=%1", physics.IsDynamic());
 				else
