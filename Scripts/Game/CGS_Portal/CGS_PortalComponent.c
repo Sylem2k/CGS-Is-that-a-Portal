@@ -35,6 +35,14 @@ class CGS_PortalComponent : ScriptComponent
 	[Attribute("6.0", UIWidgets.EditBox, "Maximum crossing step distance in meters")]
 	protected float m_fCrossingStep;
 
+	// Players walking on level ground do not cross a horizontal portal plane.
+	// This allows them to enter the portal footprint from the side instead.
+	[Attribute("1", UIWidgets.CheckBox, "Allow walking onto upward-facing floor portals")]
+	protected bool m_bWalkOnFloorEnabled;
+
+	[Attribute("1.4", UIWidgets.EditBox, "Maximum player-origin height above floor portal for walking entry (meters)")]
+	protected float m_fWalkOnHeight;
+
 
 	[Attribute("1", UIWidgets.CheckBox, "EXPERIMENT: attempt to preserve player momentum through portal")]
 	protected bool m_bPreserveMomentum;
@@ -231,6 +239,7 @@ class CGS_PortalComponent : ScriptComponent
 
 			vector currentPos = character.GetOrigin();
 			bool shouldTransfer = false;
+			string entryMode = "PLANE";
 
 			if (m_bUsePlaneCrossing)
 			{
@@ -243,13 +252,40 @@ class CGS_PortalComponent : ScriptComponent
 					float previousDepth = vector.Dot(previousOffset, portalNormal);
 					float currentDepth = vector.Dot(currentOffset, portalNormal);
 
+					// A floor portal is also usable by WALKING ONTO its visible
+					// footprint. A standing character's entity origin never
+					// crosses the floating early-catch plane above the floor.
+					// Trigger only on moving OUTSIDE -> INSIDE the rectangle,
+					// and only if the portal actually faces mostly upward.
+					if (m_bWalkOnFloorEnabled && portalNormal[1] > 0.75)
+					{
+						float prevSide = vector.Dot(previousOffset, portalRight);
+						float prevHeight = vector.Dot(previousOffset, portalUp);
+						float currSide = vector.Dot(currentOffset, portalRight);
+						float currHeight = vector.Dot(currentOffset, portalUp);
+
+						bool prevInside = Math.AbsFloat(prevSide) <= m_fHalfWidth && Math.AbsFloat(prevHeight) <= m_fHalfHeight;
+						bool currInside = Math.AbsFloat(currSide) <= m_fHalfWidth && Math.AbsFloat(currHeight) <= m_fHalfHeight;
+
+						// Character origins on ground are usually at foot level,
+						// approximately even with the portal surface.
+						if (!prevInside && currInside && currentDepth >= -0.4 && currentDepth <= m_fWalkOnHeight)
+						{
+							if (vector.DistanceSq(previousPos, currentPos) <= m_fCrossingStep * m_fCrossingStep)
+							{
+								shouldTransfer = true;
+								entryMode = "WALK_ON";
+							}
+						}
+					}
+
 					// Catch the player IN FRONT of the portal plane, before they
 					// hit a solid floor or wall. Positive local Z is the entry side.
 					float triggerDepth = m_fFrontCatchDistance;
 					if (triggerDepth < 0)
 						triggerDepth = 0;
 
-					if (previousDepth > triggerDepth && currentDepth <= triggerDepth)
+					if (!shouldTransfer && previousDepth > triggerDepth && currentDepth <= triggerDepth)
 					{
 						if (vector.DistanceSq(previousPos, currentPos) <= m_fCrossingStep * m_fCrossingStep)
 						{
@@ -283,7 +319,7 @@ class CGS_PortalComponent : ScriptComponent
 			{
 				m_iSuccessfulTransfers++;
 				if (m_bDebug && (m_iSuccessfulTransfers <= 3 || m_iSuccessfulTransfers % 10 == 0))
-					PrintFormat("[CGS PORTAL] Transfer #%1 player=%2 portal %3 to %4", m_iSuccessfulTransfers, playerId, m_iPortalID, partner.GetPortalID());
+					PrintFormat("[CGS PORTAL] Transfer #%1 player=%2 portal %3 to %4 entry=%5", m_iSuccessfulTransfers, playerId, m_iPortalID, partner.GetPortalID(), entryMode);
 			}
 		}
 	}

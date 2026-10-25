@@ -119,3 +119,31 @@ The runtime green facing arrow and colored trigger-plane rectangle also use the 
 4. Fall into Orange and verify the exit occurs *below* Blue. Watch `[CGS PORTAL PHYSICS]` for normal and velocity.
 
 This addresses incorrect portal-facing direction, not guaranteed character-controller momentum or collision-damage immunity. Keep the previous main behavior available until testing.
+
+
+## Phase 1.5 — Walk onto floor portals (test branch)
+
+Branch: `feature/portal-walk-in-floor-entry`. **Workbench compilation/gameplay not yet verified.**
+
+### Why walking was failing
+
+The early-catch trigger is a plane 1 meter in front of the physical portal. The normal floor character's origin remains at foot height when walking, so it cannot cross this elevated plane. The player may visibly step onto Orange yet never teleport.
+
+### How the fix works
+
+- **Floor-facing portals only** (outward normal world Y > 0.75): detect a player's horizontal movement from outside to inside the portal's rectangle, while their origin is between -0.4 m and +1.4 m above its surface.
+- **Falling or wall portals**: preserve directional front-to-back plane crossing as before.
+- Does not trigger simply by standing motionless in the portal. Step out of the colored pad and then back inside to activate.
+- The existing per-character teleport protection remains in `CGS_PortalTransferComponent`; the change does **not** alter portal travel distance, velocity or damage handling.
+- Editable component values: `Allow walking onto upward-facing floor portals` (on) and `Maximum player-origin height...` (1.4 m).
+- Successful transfer log includes `entry=WALK_ON` or `entry=PLANE`.
+
+### Test steps
+
+1. Check out branch and compile Game scripts.
+2. Put Orange on the floor, Blue above it on the ceiling. Both should remain flat; their Face Axis values are 1 and 2 respectively.
+3. In play mode, begin **outside** the floor portal's area and walk into it. The console should show `entry=WALK_ON`.
+4. For a falling test, enter from above; it should show `entry=PLANE`.
+5. If the player emerges below Blue but dies before reaching Orange again, that is a separate unresolved character-controller momentum/collision issue.
+
+No changes were made to model orientation, prefab resource GUIDs or collision geometry.
