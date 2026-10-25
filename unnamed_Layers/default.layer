@@ -1,3 +1,21 @@
+$grp GenericEntity {
+ {
+  components {
+   MeshObject "{6AB21D17D788F358}" {
+    Object "{A4EB7B72BC9B1048}Common/Models/Portal_Gun.xob"
+   }
+  }
+  coords 112.826 1.305 76.635
+ }
+ {
+  components {
+   MeshObject "{6AB21D17DE3713B7}" {
+    Object "{A4EB7B72BC9B1048}Common/Models/Portal_Gun.xob"
+   }
+  }
+  coords 112.764 1.228 76.327
+ }
+}
 GenericEntity : "{E5DA100433B35A4E}Prefabs/Weapons/Core/Blue_Portal.et" {
  coords 120.789 1.696 79.821
  angles 0 0 0

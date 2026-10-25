@@ -2,6 +2,7 @@ MetaFileClass {
  Name "{A4EB7B72BC9B1048}Common/Models/Portal_Gun.xob"
  Configurations {
   FBXResourceClass PC {
+   Scale 0.1 0.1 0.1
    Rotate 0 180 0
    MaterialAssigns {
     MaterialAssignClass "{6AB21AB27EF88B2B}" {
