@@ -1,0 +1,6 @@
+MatPBRBasic {
+ EmissiveMap "{5AE372B7DBC66662}Common/Models/Data/sfwatergun_emission.edds"
+ BCRMap "{5D4A912FD02C9BEF}Common/Models/Data/sfwatergun_rough.edds"
+ NMOMap "{E8B862F5B24E5F0C}Common/Models/Data/sfwatergun_metal.edds"
+ DetailNormalMap "{B4BBEB453BC08BF3}Common/Models/Data/sfwatergun_norm.edds"
+}
