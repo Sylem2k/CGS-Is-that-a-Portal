@@ -229,7 +229,7 @@ modded class SCR_PlayerController
 		if (prefabData)
 			hint = hint + " " + prefabData.GetPrefabName();
 
-		hint = hint.ToLower();
+		hint.ToLower();
 
 		return hint.IndexOf("uniform") != -1
 			|| hint.IndexOf("clothing") != -1
