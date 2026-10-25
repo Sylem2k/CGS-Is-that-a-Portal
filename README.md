@@ -238,3 +238,46 @@ This is a **kinematic approximation**, *not real engine character-controller mom
 5. If motion jitters, collides, snaps back, or becomes unstable, disable `EXPERIMENT: carry simulated momentum` on both prefabs, or return to `main`. Do not attempt production dedicated MP deployment from this experimental branch without an ownership/replication test.
 
 No portal-to-portal distance limit has been added. Original prefabs and GUIDs are preserved.
+
+
+## Phase 1.8 — Returning through a wall portal; future portal gun placement
+
+Branch: `feature/portal-return-wall-entry`. **Not yet Workbench compiled/tested.**
+
+Observed log: Orange (ID 1) → Blue (ID 0) once, but no subsequent Blue → Orange transfer when walking back. In that test both portal normals were horizontal (Blue approximately world +Z; Orange approximately world -X), so the existing floor walk-on and fall-rescue modes do not apply. Plane crossing alone can miss players when walls stop the character origin before it crosses the plane.
+
+This branch adds a configurable **wall portal approach** detector, evaluated independently for each portal. It requires moving toward the opening within the portal's rectangle, using a chest-height probe and the portal's **world-space oriented basis**. It supports approaching from the front, and optionally from behind. It is not hardcoded to any coordinates, portal IDs, or specific world axis. Successful transfers log `entry=WALL_APPROACH`. When debug is on, `[CGS PORTAL WALL CHECK]` prints approach depth and offsets at most once every 1.5 seconds per character.
+
+### Default editable settings in both portal prefabs
+
+- Allow walking back into wall portals: **on**
+- Wall approach distance: **1.75 m**
+- Character-height probe offset: **0.85 m**
+- Extra edge padding: **0.35 m**
+- Approach from either side of the opening: **on** for experimentation; this can be restricted to the front later
+- `m_bSimulateMomentum`: unchanged from the existing virtual momentum branch
+- Other floor, ceiling, fall rescue and unlimited-range behavior: unchanged
+
+### Future gun placement is an explicit requirement
+
+The stationary test prefabs are **not** the final user experience. The finished CGS Portal Gun should fire two colored portals (Blue/Orange) onto eligible collision surfaces, using a raycast hit point plus **surface normal**, then compute the portal's orientation and position *at runtime*. No Workbench rotation or user-entered axis should be required.
+
+To support that:
+- Reuse these portal components on runtime-spawned entities rather than a separately hardcoded floor or wall script.
+- Determine the entity's rotation so `GetPortalBasis(..., normal)` points **out of the impacted surface**. Currently Blue's mesh uses local -Y and Orange's uses local +Y as its front, so the placement code must respect these differing local face axes (or standardize both before shipping).
+- On placing a new Blue or Orange, remove/replace that color's old portal registration safely and update the linked partner for all players.
+- Validate surface size/placement and collision-safe spawn offsets; do not place portals inside walls or unsupported geometry.
+- Make server spawning and replication authoritative so every connected player sees the same pair.
+- Keep portal-to-portal range **unlimited**; placement distance is a different gameplay control.
+- Keep the currently optional FUN falling-assist system distinct from accurate momentum physics.
+
+### Workbench test now
+
+1. Switch to `feature/portal-return-wall-entry`, pull, and compile.
+2. Place both portals on walls oriented in any horizontal direction, at accessible walking height.
+3. Walk into Orange: `entry=WALL_APPROACH` or `entry=PLANE`.
+4. After exiting Blue, turn around and deliberately walk *into Blue*; confirm a log showing `portal 0 to 1 entry=WALL_APPROACH` and that you emerge at Orange.
+5. Repeat several times; look for excessive ping-pong, jitter, clipping or fall damage.
+6. If a trigger does not fire, provide `[CGS PORTAL WALL CHECK]` lines, facing normals and video.
+
+Wall-entry assistance is a test affordance: it may activate a short distance before actual surface crossing and is not yet tuned for every possible mounted geometry.
