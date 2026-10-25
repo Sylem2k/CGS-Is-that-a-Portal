@@ -147,8 +147,12 @@ class CGS_PortalGunComponent : ScriptComponent
 		//   Ceiling -> portal lies flat upside down and faces down.
 		//   Slope   -> follows the actual hit normal without snapping.
 		//
-		// Reforger Y is world vertical; these portal meshes are in LOCAL XZ,
-		// unlike ordinary models whose frontal axis is often local Z.
+		// Reforger Y is world vertical. The newly imported Blender
+		// Blue_Portal_Frame.xob and Orange_Portal_Frame.xob are upright
+		// in their LOCAL XY plane, with the opening facing LOCAL +Z.
+		// Our old sample meshes had their openings in local XZ, so
+		// reusing the old -Y/+Y axes made wall portals lie sideways
+		// and floor portals stand vertically.
 		float verticalFacing = Math.AbsFloat(normal[1]);
 		string surfaceType = "WALL";
 		if (normal[1] >= 0.85)
@@ -198,23 +202,21 @@ class CGS_PortalGunComponent : ScriptComponent
 		portalUp = normal * portalRight;
 		portalUp.Normalize();
 
-		// Blueprint model faces were tested with these separate axes:
-		// Blue:   LOCAL -Y is its opening face (m_iFacingAxis=2)
-		// Orange: LOCAL +Y is its opening face (m_iFacingAxis=1)
-		// Both produce the SAME outward portal basis (right/up/normal).
+		// BOTH new imported frame models are aligned to local XY:
+		//   local +X = opening right
+		//   local +Y = opening top
+		//   local +Z = opening outward normal
+		//
+		// Give both colors the same orthonormal frame.
+		// CGS_PortalComponent.m_iFacingAxis = 0 (+Z) on both gun
+		// prefabs matches this exact physical and rendered opening.
+		// The raycast, world hit offset, existing crossing detection,
+		// fall-zone logic and teleportation code do not change.
 		EntitySpawnParams params = new EntitySpawnParams();
 		params.TransformMode = ETransformMode.WORLD;
 		params.Transform[0] = portalRight;
-		if (color == 0)
-		{
-			params.Transform[1] = -normal;
-			params.Transform[2] = portalUp;
-		}
-		else
-		{
-			params.Transform[1] = normal;
-			params.Transform[2] = -portalUp;
-		}
+		params.Transform[1] = portalUp;
+		params.Transform[2] = normal;
 
 		float offset = m_fSurfaceOffset;
 		if (offset < 0.01)
@@ -257,9 +259,10 @@ class CGS_PortalGunComponent : ScriptComponent
 		spawned.SetPortalOwnerID(shooterId);
 		m_iLastShotTime = now;
 
-		// Compare the actual spawned portal face against the raycast
-		// normal. This exposes model/prefab facing-axis mistakes in
-		// Workbench without altering the working teleport code.
+		// Check the actual portal opening basis against the surface.
+		// With our new XY-frame models, local +Z is the visible face.
+		// If the basis agrees, both the visible frame and teleport
+		// crossing plane are aligned to the hit wall/floor/ceiling.
 		if (m_bDebug)
 		{
 			vector actualRight;
