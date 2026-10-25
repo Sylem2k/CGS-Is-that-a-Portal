@@ -5,7 +5,6 @@ modded class SCR_PlayerController
 	protected bool m_bCGSWasSecondaryHeld;
 	protected bool m_bCGSInputContextReported;
 	protected bool m_bCGSPinkWasPrimaryHeld;
-	protected int m_iCGSPinkDetailedAuditShotsLeft = 4;
 
 	override void OnUpdate(float timeSlice)
 	{
@@ -144,9 +143,9 @@ modded class SCR_PlayerController
 		RpcDo_CGSPinkTarget(characterID);
 	}
 
-	// PINKIFIER - SINGLE-HELMET EXPERIMENT.
-	// Discover clothing without modifying it, then remap at most one helmet.
-	// This branch is experimental; keep it separate from the animation-safe baseline.
+	// PINKIFIER - ANIMATION SAFETY TEST.
+	// Replacing skinned clothing mesh materials can break skeletal poses.
+	// Resolve and count clothing without touching character or clothing render objects.
 	[RplRpc(RplChannel.Reliable, RplRcver.Broadcast)]
 	protected void RpcDo_CGSPinkTarget(RplId characterID)
 	{
@@ -172,24 +171,17 @@ modded class SCR_PlayerController
 			return;
 		}
 
-		// List actual wearable prefab identities on the first four shots.
-		// Reading their names does not change animations or materials.
-		bool detailedAudit = m_iCGSPinkDetailedAuditShotsLeft > 0;
-		if (detailedAudit)
-			m_iCGSPinkDetailedAuditShotsLeft--;
-
-		int matched = CGS_CountWearableChildren(character, 0, detailedAudit);
-
-		// Apply to only ONE headgear mesh, never the skin/root or uniform.
-		// If even this causes a T-pose, material remapping must be abandoned.
-		int helmetsPainted = CGS_PaintFirstHeadgear(character, pinkMaterial, 0);
-		PrintFormat("[CGS PINKIFIER SINGLE HELMET TEST] Target=%1 matchedWearables=%2 headgearPainted=%3 bodyUntouched=1", character, matched, helmetsPainted);
-		if (helmetsPainted == 0)
-			Print("[CGS PINKIFIER SINGLE HELMET TEST] No helmet/headgear mesh identified. Check WEARABLE AUDIT logs.", LogLevel.WARNING);
+		// Preserve all existing skeletal mesh objects and animation links.
+		// Count matching clothing meshes only; do not recolor during this test.
+		int matched = CGS_CountWearableChildren(character, 0);
+		PrintFormat("[CGS PINKIFIER ANIMATION SAFE TEST] Target=%1 wearable meshes found=%2 material overrides=0", character, matched);
+		if (matched == 0)
+			Print("[CGS PINKIFIER ANIMATION SAFE TEST] No clothing meshes matched on this character.", LogLevel.WARNING);
 	}
 
-	// Read-only wearable enumeration with bounded diagnostic logging.
-	protected int CGS_CountWearableChildren(IEntity parent, int depth, bool detailedAudit)
+	// Read-only wearable enumeration. No SetObject/SetMaterial calls.
+	// Depth and sibling limits protect against unexpected hierarchies.
+	protected int CGS_CountWearableChildren(IEntity parent, int depth)
 	{
 		if (!parent || depth >= 8)
 			return 0;
@@ -208,74 +200,16 @@ modded class SCR_PlayerController
 				if (CGS_IsWearableClothing(child) && child.GetVObject())
 				{
 					matched++;
-					if (detailedAudit)
-					{
-						string prefabName = "";
-						EntityPrefabData prefabData = child.GetPrefabData();
-						if (prefabData)
-							prefabName = prefabData.GetPrefabName();
-						PrintFormat("[CGS PINKIFIER WEARABLE AUDIT] depth=%1 name=%2 prefab=%3", depth, child.GetName(), prefabName);
-					}
 				}
 
 				// Inspect attachment wrappers without altering skinned objects.
-				matched += CGS_CountWearableChildren(child, depth + 1, detailedAudit);
+				matched += CGS_CountWearableChildren(child, depth + 1);
 			}
 
 			child = nextChild;
 		}
 
 		return matched;
-	}
-
-	// Apply the pink material to the FIRST helmet-like mesh only.
-	// Do not recurse a material operation onto children of the helmet.
-	// This intentionally preserves all other clothing as a control group.
-	protected int CGS_PaintFirstHeadgear(IEntity parent, ResourceName pinkMaterial, int depth)
-	{
-		if (!parent || depth >= 8)
-			return 0;
-
-		int visited = 0;
-		IEntity child = parent.GetChildren();
-		while (child && visited < 96)
-		{
-			IEntity nextChild = child.GetSibling();
-			visited++;
-
-			if (!child.IsDeleted() && !child.FindComponent(WeaponComponent))
-			{
-				if (child.GetVObject() && CGS_IsHeadgear(child))
-				{
-					SCR_Global.SetMaterial(child, pinkMaterial, false);
-					PrintFormat("[CGS PINKIFIER HELMET APPLIED] name=%1 entity=%2", child.GetName(), child);
-					return 1;
-				}
-
-				if (CGS_PaintFirstHeadgear(child, pinkMaterial, depth + 1) > 0)
-					return 1;
-			}
-
-			child = nextChild;
-		}
-
-		return 0;
-	}
-
-	// Identify helmet/headgear meshes by their entity and prefab names.
-	protected bool CGS_IsHeadgear(IEntity entity)
-	{
-		if (!entity)
-			return false;
-
-		string hint = entity.GetName();
-		EntityPrefabData prefabData = entity.GetPrefabData();
-		if (prefabData)
-			hint = hint + " " + prefabData.GetPrefabName();
-
-		hint.ToLower();
-
-		return hint.IndexOf("helmet") != -1 || hint.IndexOf("headgear") != -1;
 	}
 
 	// Identify likely wearables via entity and prefab naming, for logging only.
