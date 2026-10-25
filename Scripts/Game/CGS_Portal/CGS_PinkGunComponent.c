@@ -158,7 +158,7 @@ class CGS_PinkGunComponent : ScriptComponent
 		requester.CGS_PinkBroadcastTarget(targetID);
 
 		if (m_bDebug)
-			PrintFormat("[CGS PINKIFIER] player=%1 validated paint request target=%2 id=%3 distance=%4 (visual override disabled for animation safety)", playerId, target, targetID, range * fraction);
+			PrintFormat("[CGS PINKIFIER] player=%1 validated skin-only test target=%2 id=%3 distance=%4 (body tint and optional face tint)", playerId, target, targetID, range * fraction);
 
 		return true;
 	}
