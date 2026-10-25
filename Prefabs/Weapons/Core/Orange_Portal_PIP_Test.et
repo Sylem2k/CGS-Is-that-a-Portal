@@ -1,4 +1,5 @@
 // PiP proof-of-concept only; does NOT replace stable Blue_Portal / Orange_Portal.
+// Now both static test frames show the opposite portal camera simultaneously.
 // Disable ordinary travel while evaluating camera feeds, and keep frame/glow intact.
 GenericEntity {
  ID "6AB25DDA4F023100"
@@ -11,7 +12,7 @@ GenericEntity {
    m_bShowFacingArrow 0
   }
   CGS_PortalPIPTestComponent "{6AB25DDA4F023102}" {
-   m_bPreviewEnabled 0
+   m_bPreviewEnabled 1
    m_iCameraIndex 21
    m_iMaxFPS 12
    m_fResolutionScale 0.5
@@ -19,6 +20,8 @@ GenericEntity {
    m_fCameraOutset 0.25
    m_bDebug 1
    m_bDebugHUD 0
+   m_bMatchPlayerHDR 1
+   m_fHDRExposureMultiplier 1.0
    m_bUseHorizontalTestView 1
   }
   MeshObject "{6AB25DDA4F023103}" {
