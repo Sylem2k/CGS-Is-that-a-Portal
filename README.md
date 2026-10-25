@@ -793,3 +793,44 @@ The imported `Blue_Portal_Frame.xob` and `Orange_Portal_Frame.xob` use a flat XY
 6. Walk through both directions and check that my anti-reentry protection still stops bounce loops. When I replace a portal with another gunshot, the matching view should rebind without stealing another player's pair.
 
 **Status:** This is a source-level repair pushed as a separate PR, not yet compiled/tested by Workbench. If a model still appears 90 degrees out after the update, I will compare the actual mesh front axis and its Workbench import rotation before changing any gameplay/teleport code again.
+
+
+## Phase 2.5 — CGS Pinkifier Gun (independent novelty weapon)
+
+I wanted a funny alternative to the portal gun: a pistol that turns another player's or AI soldier's visible body and outfit hot pink when shot, with **zero damage**. I have added a first prototype on `feature/pinkifier-nonlethal-gun`, without replacing or retasking my working portal gun.
+
+### Assets I added
+
+- `Prefabs/Weapons/Core/Pinkifier_Gun.et` with its own resource metadata and independent internal component GUIDs. The prefab can be dragged directly into a Workbench world for testing.
+- `Scripts/Game/CGS_Portal/CGS_PinkGunComponent.c`: new server-authoritative Pinkifier shot logic, separate from `CGS_PortalGunComponent`.
+- `Common/Models/Data/CGS_Pinkifier_Pink.emat`: bright hot-pink replacement material for character meshes, clothing and other visible child meshes.
+- `Common/Models/Data/CGS_Pinkifier_Gun.emat`: pink paint for the gun model itself, applied **only to the Pinkifier instance** with a material-slot remap; my original CGS Portal Gun stays visually unchanged.
+
+I reused my existing `Portal_Gun.xob`, basic pistol handling/IK, inventory pickup/holster actions, and empty non-ballistic muzzle for the Pinkifier's first model. I can import a new model later without changing this paint-shooting logic.
+
+### Shooting and multiplayer design
+
+- **LMB** shoots a non-damaging, server-validated visual ray at up to 75 meters. **RMB** retains normal aiming; there is no secondary Pinkifier action.
+- The server verifies that the player is alive, actively holding their own Pinkifier, the submitted camera start is near their actual eyes, the aim vector is valid, the shot cooldown elapsed, and the **first ray hit** is a character (or something attached to a character). Walls or vehicles in front of the target block the paint ray.
+- The server extracts the affected `ChimeraCharacter` and its replicated entity ID. It uses a reliable Broadcast RPC to instruct each connected client to apply the same material locally to that character. This is **not** a damage event and never changes health, armor values, hit zones, inventory contents, character physics or portal placement.
+- Reforger already provides `SCR_Global.SetMaterial(entity, material, recursively: true)`. I use that official material-remapping helper on the target character, including children, so clothing and worn equipment should take on the pink look along with the body. Equipped objects parented to the character may also turn pink; this is fine for a novelty gun.
+- The Pinkifier uses the same working approach as my Portal Gun's client-input + server-RPC pipeline, but with distinct methods. While holding the Pinkifier, it cannot accidentally fire or replace my Blue/Orange portals.
+
+### What I need to test
+
+1. Pull this branch and **compile the Game script module**. This feature has not yet been compiled in Workbench.
+2. Find `Prefabs/Weapons/Core/Pinkifier_Gun.et` in Resource Browser, drop it into a test world, pick it up and equip it. Its model should appear pink. The normal Portal Gun should still look and function as before.
+3. Stand 5–20 meters from an AI soldier and shoot them with LMB. Check that the character's visible mesh/outfit turns hot pink without injury. Watch for `[CGS PINKIFIER] player=... painted character=... id=...` in the authority log.
+4. Shoot an actual wall, vehicle or empty ground; these should not change. Verify no bullets, hitscan damage or death are produced.
+5. With two players, paint another player's character. Check that **both clients** see the same hot-pink visual on that target. Paint an AI soldier while a second player watches to test non-player RplId lookup.
+6. Equip my actual Portal Gun and verify LMB Blue, MMB Orange, PiP live views, teleportation and anti-reentry still work.
+7. Report the first compiler errors or RPC warnings if any. I will keep the new system isolated from the existing portal scripts except for the new Pinkifier-only branch in the player-controller input bridge.
+
+### Known prototype limitations
+
+- The pink effect is intended to last for the lifetime of the affected character, but a respawn, model/LOD change or replacing equipped gear may restore the original material. **Late joiners do not yet receive a persistent painted-character registry**; this is an event-based first multiplayer test.
+- Characters or AI without a valid replicated entity ID are rejected rather than silently coloring the server only.
+- My first shader replaces the original material rather than preserving clothing camouflage and normal textures. I can add multiple colors (pink, blue, lime, gold), a duration timer or a restore mechanism after the initial firing/replication path is verified.
+- The Pinkifier is a separate, Workbench-placeable prefab. Registering it in every Game Master inventory/arsenal category is a separate step if I want it distributed through those catalogs.
+
+**Status:** Source and prefab are pushed for Workbench testing, but I have not claimed to verify compilation, actual character painting or multiplayer replication.
