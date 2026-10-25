@@ -18,6 +18,8 @@ GenericEntity {
    m_fCameraFOV 75
    m_fCameraOutset 0.25
    m_bDebug 1
+   m_bDebugHUD 1
+   m_bUseHorizontalTestView 1
   }
   MeshObject "{6AB25DDA4F023003}" {
    Object "{82397680AD75CA10}Common/Models/Blue_Portal_Frame.xob"

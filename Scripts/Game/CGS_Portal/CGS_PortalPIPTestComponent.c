@@ -48,6 +48,15 @@ class CGS_PortalPIPTestComponent : ScriptComponent
 	[Attribute("1", UIWidgets.CheckBox, "Print one-time PIP state logs")]
 	protected bool m_bDebug;
 
+	[Attribute("1", UIWidgets.CheckBox, "Show temporary 256px camera preview in local HUD. If HUD works but model is blank, check XOB screen material.")]
+	protected bool m_bDebugHUD;
+
+	[Attribute("{6AB25DDA4F038010}UI/Layouts/CGS_PortalPIP_DebugHUD.layout", UIWidgets.ResourceNamePicker, "Temporary independent HUD image to check render target separately from the portal material", "layout")]
+	protected ResourceName m_sDebugHUDLayout;
+
+	[Attribute("1", UIWidgets.CheckBox, "Only for first PIP test: if partner normal points straight up/down, point camera horizontally to see scenery.")]
+	protected bool m_bUseHorizontalTestView;
+
 	protected static ref array<CGS_PortalPIPTestComponent> s_aTests = {};
 
 	protected CGS_PortalComponent m_pPortal;
@@ -57,6 +66,8 @@ class CGS_PortalPIPTestComponent : ScriptComponent
 	protected RTTextureWidget m_wRTTexture;
 	protected RenderTargetWidget m_wView;
 	protected ScriptCamera m_pFeedCamera;
+	protected ref Widget m_wDebugHUD;
+	protected ImageWidget m_wDebugHUDImage;
 	protected bool m_bLoggedNoPartner;
 	protected bool m_bInitialized;
 	protected bool m_bStartScheduled;
@@ -211,17 +222,45 @@ class CGS_PortalPIPTestComponent : ScriptComponent
 		//    BCRMap "$rendertarget"
 		m_wRTTexture.SetRenderTarget(GetOwner());
 
+		// The HUD preview samples the SAME RTTextureWidget through a
+		// standard ImageWidget API. It bypasses the model's $rendertarget
+		// material. This makes camera/layout failures distinguishable from
+		// incorrect material assignments or invisible ViewPlane geometry.
+		if (m_bDebugHUD)
+		{
+			m_wDebugHUD = GetGame().GetWorkspace().CreateWidgets(m_sDebugHUDLayout);
+			if (m_wDebugHUD)
+			{
+				m_wDebugHUDImage = ImageWidget.Cast(m_wDebugHUD.FindAnyWidget("PIPDebugImage"));
+				if (m_wDebugHUDImage)
+				{
+					m_wDebugHUDImage.SetImageTexture(0, m_wRTTexture);
+					Print("[CGS PORTAL PIP HUD] Local preview created. Top left image = camera feed independent of mesh. If this works but portal stays blank, check the XOB screen material.");
+				}
+				else
+				{
+					Print("[CGS PORTAL PIP HUD] WARNING: PIPDebugImage not found in diagnostic HUD layout.");
+				}
+			}
+			else
+			{
+				Print("[CGS PORTAL PIP HUD] WARNING: Could not load diagnostic HUD layout.");
+			}
+		}
+
 		m_bInitialized = true;
 
 		if (m_bDebug)
 		{
 			vector lens[4];
 			m_pFeedCamera.GetTransform(lens);
-			PrintFormat("[CGS PORTAL PIP CAMERA] ScriptCamera CREATED slot=%1 origin=%2 forward=%3", m_iCameraIndex, lens[3], lens[2]);
+			PrintFormat("[CGS PORTAL PIP CAMERA] ScriptCamera CREATED slot=%1 origin=%2 forward=%3 partnerPosition=%4", m_iCameraIndex, lens[3], lens[2], m_pPartner.GetOwner().GetOrigin());
 
 			vector remoteForward = lens[2];
 			if (Math.AbsFloat(remoteForward[1]) >= 0.85)
-				Print("[CGS PORTAL PIP CAMERA] NOTE: Remote test portal faces nearly vertical. Camera sees mostly SKY or GROUND. Rotate both test frame prefabs upright to see scenery.");
+				Print("[CGS PORTAL PIP CAMERA] NOTE: Camera is vertical; rotate remote test frame or enable horizontal preview.");
+			else
+				Print("[CGS PORTAL PIP CAMERA] Camera aimed toward scenery (not vertical).");
 
 			PrintFormat("[CGS PORTAL PIP] LIVE test feed bound: color=%1 camera=%2 partner=%3 fps=%4 scale=%5", m_pPortal.GetPortalID(), m_iCameraIndex, m_pPartner.GetPortalID(), fps, scale);
 			Print("[CGS PORTAL PIP MATERIAL] If view remains blank, check *_ViewPlane material resolves to CGS_Portal_PIP_Screen_TEST.emat (BCRMap $rendertarget); reimport frame .xob.");
@@ -242,8 +281,16 @@ class CGS_PortalPIPTestComponent : ScriptComponent
 	//------------------------------------------------------------------------------------------------
 	protected void DestroyPreview()
 	{
-		// Unbind first. Removing a render target after its material or
-		// owner has gone away can crash the engine's render thread.
+		// Remove the independent HUD preview first so nothing continues
+		// sampling RTTexture0 during shutdown / Workbench reload.
+		if (m_wDebugHUD)
+			m_wDebugHUD.RemoveFromHierarchy();
+
+		m_wDebugHUD = null;
+		m_wDebugHUDImage = null;
+
+		// Then unbind the mesh material before removing the render-target
+		// layout and ScriptCamera (native render thread owns these refs).
 		if (m_wRTTexture && GetOwner() && !GetOwner().IsDeleted())
 			m_wRTTexture.RemoveRenderTarget(GetOwner());
 
@@ -278,6 +325,26 @@ class CGS_PortalPIPTestComponent : ScriptComponent
 		vector up;
 		vector normal;
 		m_pPartner.GetPortalBasis(right, up, normal);
+
+		// The prefab's unrotated +Y face points straight UP. A live
+		// remote image of empty sky can be mistaken for a black/blank
+		// render target. For the FIRST test, look horizontally toward
+		// scenery if the portal normal is nearly vertical. This does not
+		// change the actual frame or teleport directions.
+		if (m_bUseHorizontalTestView && Math.AbsFloat(normal[1]) > 0.85)
+		{
+			vector partnerTransform[4];
+			m_pPartner.GetOwner().GetWorldTransform(partnerTransform);
+			vector forwardHorizontal = partnerTransform[2];
+			forwardHorizontal[1] = 0;
+			float horizontalLength = forwardHorizontal.Length();
+			if (horizontalLength > 0.1)
+			{
+				normal = forwardHorizontal / horizontalLength;
+				up = "0 1 0";
+				right = Vector(normal[2], 0, -normal[0]);
+			}
+		}
 
 		// Face OUT of the destination portal, looking at the scene
 		// that a traveller would see after exiting there.
@@ -344,7 +411,14 @@ class CGS_PortalPIPTestComponent : ScriptComponent
 				{
 					vector actual[4];
 					owner.GetWorld().GetCamera(m_iCameraIndex, actual);
-					PrintFormat("[CGS PORTAL PIP CAMERA] World camera READBACK slot=%1 origin=%2 forward=%3", m_iCameraIndex, actual[3], actual[2]);
+					PrintFormat("[CGS PORTAL PIP CAMERA] World camera READBACK slot=%1 origin=%2 forward=%3 partnerPosition=%4", m_iCameraIndex, actual[3], actual[2], m_pPartner.GetOwner().GetOrigin());
+					float outerW;
+					float outerH;
+					float innerW;
+					float innerH;
+					m_wRTTexture.GetScreenSize(outerW, outerH);
+					m_wView.GetScreenSize(innerW, innerH);
+					PrintFormat("[CGS PORTAL PIP LAYOUT] RTTexture0=%1x%2 pixels RenderTarget0=%3x%4 pixels (target >0 in both dimensions)", outerW, outerH, innerW, innerH);
 				}
 			}
 			return;
