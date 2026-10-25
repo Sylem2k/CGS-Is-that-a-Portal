@@ -17,6 +17,12 @@ GenericEntity {
    m_fCrossingStep 6
    m_bWalkOnFloorEnabled 1
    m_fWalkOnHeight 1.4
+   m_bFallCatchAssist 0
+   m_fFallCatchHeight 3.5
+   m_fFallCatchHalfWidth 5
+   m_fFallCatchHalfLength 5
+   m_fExitLateralScale 0
+   m_bUseSafePlayerTeleport 1
    m_bPreserveMomentum 1
    m_fMomentumMultiplier 1
    m_fMaxExitSpeed 45

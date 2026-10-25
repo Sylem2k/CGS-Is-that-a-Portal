@@ -43,6 +43,26 @@ class CGS_PortalComponent : ScriptComponent
 	[Attribute("1.4", UIWidgets.EditBox, "Maximum player-origin height above floor portal for walking entry (meters)")]
 	protected float m_fWalkOnHeight;
 
+	// Optional generous catch volume for a FUN floor-to-ceiling fall loop.
+	// This is separate from the visible portal's regular size.
+	[Attribute("1", UIWidgets.CheckBox, "FUN MODE: rescue falling player above an upward floor portal")]
+	protected bool m_bFallCatchAssist;
+
+	[Attribute("3.5", UIWidgets.EditBox, "FUN MODE: rescue plane height above floor portal (meters)")]
+	protected float m_fFallCatchHeight;
+
+	[Attribute("5.0", UIWidgets.EditBox, "FUN MODE: rescue half-width (meters)")]
+	protected float m_fFallCatchHalfWidth;
+
+	[Attribute("5.0", UIWidgets.EditBox, "FUN MODE: rescue half-length (meters)")]
+	protected float m_fFallCatchHalfLength;
+
+	[Attribute("1.0", UIWidgets.EditBox, "Exit lateral offset scale: 1=physical position, 0=center of exit portal")]
+	protected float m_fExitLateralScale;
+
+	[Attribute("1", UIWidgets.CheckBox, "Safe player teleport: use Reforger SCR_Global.TeleportPlayer (resets velocity)")]
+	protected bool m_bUseSafePlayerTeleport;
+
 
 	[Attribute("1", UIWidgets.CheckBox, "EXPERIMENT: attempt to preserve player momentum through portal")]
 	protected bool m_bPreserveMomentum;
@@ -203,6 +223,34 @@ class CGS_PortalComponent : ScriptComponent
 		segment[0] = d;
 		segment[1] = a;
 		Shape.CreateLines(frameColor, ShapeFlags.ONCE | ShapeFlags.NOZBUFFER, segment, 2);
+
+		// Pink rectangle = expanded FUN MODE midair rescue area.
+		if (m_bFallCatchAssist && direction[1] > 0.75)
+		{
+			float rescueDepth = m_fFallCatchHeight;
+			if (rescueDepth < m_fFrontCatchDistance + 0.1)
+				rescueDepth = m_fFrontCatchDistance + 0.1;
+			vector rescueCenter = origin + direction * rescueDepth;
+			vector rescueRight = rightAxis * m_fFallCatchHalfWidth;
+			vector rescueUp = upAxis * m_fFallCatchHalfLength;
+			vector p1 = rescueCenter + rescueRight + rescueUp;
+			vector p2 = rescueCenter - rescueRight + rescueUp;
+			vector p3 = rescueCenter - rescueRight - rescueUp;
+			vector p4 = rescueCenter + rescueRight - rescueUp;
+
+			segment[0] = p1;
+			segment[1] = p2;
+			Shape.CreateLines(Color.PINK, ShapeFlags.ONCE | ShapeFlags.NOZBUFFER, segment, 2);
+			segment[0] = p2;
+			segment[1] = p3;
+			Shape.CreateLines(Color.PINK, ShapeFlags.ONCE | ShapeFlags.NOZBUFFER, segment, 2);
+			segment[0] = p3;
+			segment[1] = p4;
+			Shape.CreateLines(Color.PINK, ShapeFlags.ONCE | ShapeFlags.NOZBUFFER, segment, 2);
+			segment[0] = p4;
+			segment[1] = p1;
+			Shape.CreateLines(Color.PINK, ShapeFlags.ONCE | ShapeFlags.NOZBUFFER, segment, 2);
+		}
 	}
 
 	override void EOnFrame(IEntity owner, float timeSlice)
@@ -279,6 +327,41 @@ class CGS_PortalComponent : ScriptComponent
 						}
 					}
 
+					// FUN LOOP: rescue a DESCENDING character anywhere within the
+					// elevated rescue volume, not just on the exact frame where
+					// the top plane is crossed. Large frame steps, teleport
+					// corrections and animation can skip a single-plane check.
+					if (!shouldTransfer && m_bFallCatchAssist && portalNormal[1] > 0.75)
+					{
+						float rescueTop = m_fFallCatchHeight;
+						if (rescueTop < m_fFrontCatchDistance + 0.1)
+							rescueTop = m_fFrontCatchDistance + 0.1;
+
+						float rescueSide = vector.Dot(currentOffset, portalRight);
+						float rescueLength = vector.Dot(currentOffset, portalUp);
+						bool inFootprint = Math.AbsFloat(rescueSide) <= m_fFallCatchHalfWidth && Math.AbsFloat(rescueLength) <= m_fFallCatchHalfLength;
+
+						// A character may move only a few centimeters in one
+						// rendered frame. Check both displacement and velocity.
+						bool descending = previousPos[1] > currentPos[1] + 0.015;
+						ChimeraCharacter candidate = ChimeraCharacter.Cast(character);
+						if (candidate)
+						{
+							CharacterControllerComponent movementController = candidate.GetCharacterController();
+							if (movementController && movementController.IsFalling() && movementController.GetVelocity()[1] < -0.25)
+								descending = true;
+						}
+
+						// For an upward-facing floor portal this is a vertical
+						// prism from 0.35 m above the portal to rescueTop.
+						// Trigger BEFORE terrain collision, while falling.
+						if (descending && inFootprint && currentDepth <= rescueTop && currentDepth >= 0.35)
+						{
+							shouldTransfer = true;
+							entryMode = "FALL_ZONE";
+						}
+					}
+
 					// Catch the player IN FRONT of the portal plane, before they
 					// hit a solid floor or wall. Positive local Z is the entry side.
 					float triggerDepth = m_fFrontCatchDistance;
@@ -315,7 +398,7 @@ class CGS_PortalComponent : ScriptComponent
 			if (!shouldTransfer)
 				continue;
 
-			if (CGS_PortalTransferComponent.TryTransfer(character, this, partner))
+			if (CGS_PortalTransferComponent.TryTransfer(character, this, partner, playerId))
 			{
 				m_iSuccessfulTransfers++;
 				if (m_bDebug && (m_iSuccessfulTransfers <= 3 || m_iSuccessfulTransfers % 10 == 0))
@@ -337,6 +420,16 @@ class CGS_PortalComponent : ScriptComponent
 	float GetExitOffset()
 	{
 		return m_fExitOffset;
+	}
+
+	float GetExitLateralScale()
+	{
+		return m_fExitLateralScale;
+	}
+
+	bool GetUseSafePlayerTeleport()
+	{
+		return m_bUseSafePlayerTeleport;
 	}
 
 	float GetFrontCatchDistance()

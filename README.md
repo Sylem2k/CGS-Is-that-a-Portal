@@ -147,3 +147,54 @@ The early-catch trigger is a plane 1 meter in front of the physical portal. The 
 5. If the player emerges below Blue but dies before reaching Orange again, that is a separate unresolved character-controller momentum/collision issue.
 
 No changes were made to model orientation, prefab resource GUIDs or collision geometry.
+
+
+## Phase 1.6 — Falling rescue / loop assist (EXPERIMENTAL)
+
+Branch: `feature/portal-fall-catch-assist`. This is not yet validated by a Reforger Workbench compile or gameplay test.
+
+### Evidence motivating this patch
+
+During a test the Orange floor portal was at approximately `<125.148,1.353,79.561>` and the character died on terrain at approximately `<125.339,1.000,83.500>`. The impact was nearly 4 meters sideways from the floor portal, well outside the prior 3 m × 4 m detection rectangle. The video also showed the player drifting past the pad before impact.
+
+### Editable settings
+
+| Setting | Blue (ceiling) | Orange (floor) | Purpose |
+| --- | ---: | ---: | --- |
+| Face Axis | 2 (-Y) | 1 (+Y) | Blue points down, Orange points up |
+| FUN MODE: rescue falling player | 0 (off) | 1 (on) | Only Orange catches a fall |
+| FUN MODE: rescue height | 3.5 m | 3.5 m | Rescue plane in front of the portal |
+| FUN MODE: rescue half-width/half-length | 5 / 5 m | 5 / 5 m | 10 × 10 m catch region |
+| Exit lateral offset scale | 0 | 0 | Appear at exit center instead of preserving sideways entry displacement |
+
+The standard visible portal footprint (3×4 m), walk-on detection, early plane crossing, and unlimited portal-to-portal range remain unchanged. The **pink rectangle** in play mode shows Orange's new extra falling catch region. Green arrows continue to show outward portal normals.
+
+### Testing
+
+1. Check out `feature/portal-fall-catch-assist`; reload Game scripts and compile.
+2. Put Orange flat on ground facing UP and Blue approximately 10–15 m above it facing DOWN.
+3. Walk onto Orange from outside; look for `entry=WALK_ON`.
+4. Let go of movement controls and fall; look for `entry=FALL_RESCUE` on the next transfer as you pass the pink elevated rectangle.
+5. Check whether two or more cycles occur without collision deaths.
+6. If the character still dies, send `[CGS PORTAL]`, `[CGS PORTAL FALL]`, `[CGS PORTAL PHYSICS]`, and `KILL SUICIDE` log lines plus video.
+
+This is **fall-assist teleportation**, not guaranteed true momentum conservation: Reforger's normal character physics body has been observed `dynamic=0`. The script now refrains from calling `Physics.SetVelocity` on a non-dynamic body. Normal collision damage remains enabled. Turn off the assist on Orange to compare with physically strict behavior. Set exit lateral scale to `1` on either portal to restore full entry position preservation. No world-distance limit was introduced.
+
+
+## Phase 1.6b — Falling volume catch + safe player teleport test
+
+Observed: Orange -> Blue `entry=WALK_ON`, followed by another Orange -> Blue `entry=PLANE`, then fatal abdomen COLLISION at ground level. The older one-frame `FALL_RESCUE` trigger was not reliably reached.
+
+This experimental revision:
+- Uses **FALL_ZONE** detection whenever a player is descending through the volume between 0.35 m and 3.5 m above the Orange portal, within a 10 m × 10 m lateral region. Unlike the earlier FALL_RESCUE, it does **not** require crossing the volume's exact top plane on a particular frame.
+- Adds **Safe Player Teleport** (on by default for both test prefabs), using `SCR_Global.TeleportPlayer(playerId, destinationPosition)`. Reforger's stock method resets physics velocity, so this prioritizes survival/functional repeat loops over true momentum conservation.
+- Keeps the existing 150 ms anti-loop cooldown, walking-entry detection, face axes, centered exit, and unchanged world-distance range.
+- Avoids velocity writes on non-dynamic character bodies and reports `safePlayerTeleport=1` in the physics log.
+- **Does not disable collision damage or guarantee survival.** Exit clearance still matters and character ownership in dedicated MP remains untested.
+
+Expected transfer sequence after walking onto Orange:
+`entry=WALK_ON`, then `entry=FALL_ZONE` repeatedly as the character falls from the Blue ceiling exit. Some `entry=PLANE` entries are acceptable if the narrow trigger catches first.
+
+The fall-volume visualization remains the pink rectangle at its top; the actual rescue zone extends downward from it. To compare stock vs safe character teleport, toggle `Safe player teleport` in the destination portal's component. Restore it to ON after comparison.
+
+**Workbench compilation has not been verified** for this revision. If compilation succeeds but a collision death still occurs, collect `[CGS PORTAL PHYSICS]`, `[CGS PORTAL]`, and `KILL SUICIDE` lines together with the position and timestamp to see whether the engine actually moved/cleared character velocity.
