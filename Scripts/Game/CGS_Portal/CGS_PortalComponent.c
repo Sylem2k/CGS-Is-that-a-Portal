@@ -5,7 +5,7 @@ class CGS_PortalComponentClass : ScriptComponentClass
 
 class CGS_PortalComponent : ScriptComponent
 {
-	[Attribute("0", UIWidgets.ComboBox, "Portal identity: 0 blue, 1 orange", "", ParamEnumArray.FromString("Blue,0,Orange,1"))]
+	[Attribute("0", UIWidgets.EditBox, "Portal identity: 0 = Blue, 1 = Orange")]
 	protected int m_iPortalID;
 
 	[Attribute("1", UIWidgets.CheckBox, "Enable this portal")]
