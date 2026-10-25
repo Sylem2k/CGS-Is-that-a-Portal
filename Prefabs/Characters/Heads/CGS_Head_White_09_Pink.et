@@ -1,0 +1,28 @@
+// Inherited pink skin appearance for Head_White_09.
+// Preserves native head/face rig, eye materials, animation and attachments.
+// Set during identity prefab instantiation, NOT by SetObject() on a live head.
+GameEntity : "{24644218743CDFBD}Prefabs/Characters/Heads/Head_White_09.et" {
+ ID "529C89342C390093"
+ components {
+  MeshObject "{529C8934211B4893}" {
+   Materials {
+    MaterialAssignClass "{6AB2F1A0000004A1}" {
+     SourceMaterial "Head_White_09"
+     AssignedMaterial "{6AB2F1A000000100}Common/Models/Data/CGS_Pinkifier_Pink.emat"
+    }
+    MaterialAssignClass "{6AB2F1A0000004A2}" {
+     SourceMaterial "Head_White_09_wound"
+     AssignedMaterial "{6AB2F1A000000100}Common/Models/Data/CGS_Pinkifier_Pink.emat"
+    }
+    MaterialAssignClass "{6AB2F1A0000004A3}" {
+     SourceMaterial "Neck"
+     AssignedMaterial "{6AB2F1A000000100}Common/Models/Data/CGS_Pinkifier_Pink.emat"
+    }
+    MaterialAssignClass "{6AB2F1A0000004A4}" {
+     SourceMaterial "Neck_wound"
+     AssignedMaterial "{6AB2F1A000000100}Common/Models/Data/CGS_Pinkifier_Pink.emat"
+    }
+   }
+  }
+ }
+}

@@ -212,7 +212,7 @@ modded class SCR_PlayerController
 		}
 
 		// Shots after successful pinkifying are idempotent.
-		if (currentHead.Contains("CGS_Head_Asian_02_Pink") || currentHead.Contains("CGS_Head_White_04_Pink"))
+		if (currentHead.Contains("CGS_Head_") && currentHead.Contains("_Pink.et"))
 		{
 			PrintFormat("[CGS PINKIFIER PINK HEAD TEST] Already pink: %1", currentHead);
 			return;
@@ -234,16 +234,40 @@ modded class SCR_PlayerController
 		PrintFormat("[CGS PINKIFIER PINK HEAD TEST] Identity swapped old=%1 new=%2", currentHead, newHead);
 	}
 
-	// Deliberately narrow test scope. Expand to other skin/head types
-	// only after Workbench confirms these inherited prefabs render
-	// and animate correctly with no visible displacement.
+	// Automatically select a matching pink prefab for all 10 known
+	// vanilla head types. Spawned US soldiers can have randomized heads.
+	// Unrecognized modded head types remain unchanged and log a warning.
 	protected ResourceName CGS_GetPinkHeadPrefab(ResourceName currentHead)
 	{
 		if (currentHead.Contains("Head_Asian_02"))
 			return "{6AB2F1A000000430}Prefabs/Characters/Heads/CGS_Head_Asian_02_Pink.et";
 
+		if (currentHead.Contains("Head_Black_02"))
+			return "{6AB2F1A000000440}Prefabs/Characters/Heads/CGS_Head_Black_02_Pink.et";
+
+		if (currentHead.Contains("Head_White_02"))
+			return "{6AB2F1A000000450}Prefabs/Characters/Heads/CGS_Head_White_02_Pink.et";
+
+		if (currentHead.Contains("Head_White_03"))
+			return "{6AB2F1A000000460}Prefabs/Characters/Heads/CGS_Head_White_03_Pink.et";
+
 		if (currentHead.Contains("Head_White_04"))
 			return "{6AB2F1A000000420}Prefabs/Characters/Heads/CGS_Head_White_04_Pink.et";
+
+		if (currentHead.Contains("Head_White_05"))
+			return "{6AB2F1A000000470}Prefabs/Characters/Heads/CGS_Head_White_05_Pink.et";
+
+		if (currentHead.Contains("Head_White_06"))
+			return "{6AB2F1A000000480}Prefabs/Characters/Heads/CGS_Head_White_06_Pink.et";
+
+		if (currentHead.Contains("Head_White_08"))
+			return "{6AB2F1A000000490}Prefabs/Characters/Heads/CGS_Head_White_08_Pink.et";
+
+		if (currentHead.Contains("Head_White_09"))
+			return "{6AB2F1A0000004A0}Prefabs/Characters/Heads/CGS_Head_White_09_Pink.et";
+
+		if (currentHead.Contains("Head_White_10"))
+			return "{6AB2F1A0000004B0}Prefabs/Characters/Heads/CGS_Head_White_10_Pink.et";
 
 		return "";
 	}
