@@ -504,3 +504,56 @@ I kept the proven firing and traversal system and updated only `Scripts/Game/CGS
 - Test same-color replacement and separate players' pairs, to confirm no regressions.
 
 **Known limitations:** Only static collision surfaces are supported. This patch aligns the *portal opening*, not the *character's rotation* after teleportation; the existing safe-player teleport intentionally preserves upright player facing. Portal surface-size validation and clipping into narrow/uneven walls remain future work.
+
+
+## Phase 2.3 — Portal picture-in-picture isolated Workbench experiment
+
+**Branch:** \`feature/portal-pip-render-prototype\` (uncompiled; gameplay not verified).
+
+We have two new imported frame models, each already containing a separate portal view-plane material:
+- \`Common/Models/Blue_Portal_Frame.xob\` GUID \`{82397680AD75CA10}\`
+- \`Common/Models/Orange_Portal_Frame.xob\` GUID \`{C2D10223091B0296}\`
+
+The new independent test prefabs are:
+- \`Prefabs/Weapons/Core/Blue_Portal_PIP_Test.et\` — PIP **enabled**, camera index **20**
+- \`Prefabs/Weapons/Core/Orange_Portal_PIP_Test.et\` — PIP **disabled**, camera index **21**
+
+**Do not replace the gun's working Blue/Orange prefabs.** Both PIP test prefabs have \`CGS_PortalComponent.m_bEnabled 0\`, so the experiment tests cameras/materials and does not teleport players.
+
+### Rendering mechanism
+
+Based on the actual Reforger vanilla \`SCR_PIPSightsComponent.c\`:
+1. Spawn both test prefabs into a Workbench test world, positioned far enough apart to see different scenery.
+2. New \`Scripts/Game/CGS_Portal/CGS_PortalPIPTestComponent.c\` discovers the opposite-color *test* prefab on the same local client.
+3. The Blue test prefab aims local camera index 20 outward from Orange's opening by calling \`GetWorld().SetCameraEx(20, ...) \`.
+4. Create vanilla \`{EF091399D840192D}UI/layouts/Sights/PictureInPictureSightsLayout.layout\`, find its \`RTTexture0\` and \`RenderTarget0\` widget objects.
+5. \`RenderTarget0.SetWorld(world, 20)\` renders the second view; \`RTTexture0.SetRenderTarget(bluePortalEntity)\` streams those rendered pixels into its mesh section with the new \`Common/Models/Data/CGS_Portal_PIP_Screen_TEST.emat\` (\`BCRMap "$rendertarget"\`). New blue/orange \`.xob.meta\` files replace **only** the screen material mapping; the frame metal/glow assignments remain as imported.
+6. If the first feed works, enable the Orange PIP test component locally to try the reverse view, camera slot 21. **Two active PIP portals can capture each other's screens, which may recurse. Test one feed first.**
+
+**Expected first log:**
+\`\`\`
+[CGS PORTAL PIP] Registered test portal color=0 enable=1 camera=20
+[CGS PORTAL PIP] Registered test portal color=1 enable=0 camera=21
+[CGS PORTAL PIP] LIVE test feed bound: color=0 camera=20 partner=1 fps=12 scale=0.5
+\`\`\`
+
+### Limitations / follow-up
+
+- **Unverified proof-of-concept**, not a finished portal window. May require changing layout/widget binding or material settings after testing in Workbench.
+- Uses one **static test pair** only, not personal-player-pair networking.
+- The remote camera is presently fixed at the partner opening, **not** viewer-relative or parallax-correct. The full effect requires per-viewer camera transform and surface masking.
+- No automatic clipping behind the destination portal, recursive portal occlusion control, or optimization for many pairs.
+- Every running **client** renders locally. A dedicated server should not create UI or cameras.
+- Render target sizes may differ from game resolution; first test is capped at 12 FPS and 0.5 scale to limit cost.
+- New generated textures (BCR/NMO) are **not required for the PIP screen**, because that specific test material uses \`BCRMap "$rendertarget"\`; metal/glow can keep their own materials.
+- The working PR #15 teleport re-entry-loop fix is included in this test branch so that changing branches won't regress the user-tested stability. When PR #15 is merged into main, GitHub will naturally deduplicate the overlapping commits.
+
+### Smoke test
+
+1. Compile Game module. If it fails, send the *first* errors mentioning \`CGS_PortalPIPTestComponent.c\`.
+2. In Resource Manager check \`Blue_Portal_Frame.xob.meta\` assigns the **ViewPlane** source material to \`CGS_Portal_PIP_Screen_TEST.emat\`. Force-reimport the XOB if necessary.
+3. In World Editor place one Blue and one Orange \`*_PIP_Test.et\`. You can leave them in the same world as stable portals; the test entities do not alter the gun.
+4. Enter Play. Look for logs above; inspect Blue screen for a view from Orange's location. Try moving AI near Orange to prove it is a **live** feed.
+5. If it shows black or a static color, send the PIP logs, screenshot of **screen material** in Resource Manager, and any Layout warnings. Do not overwrite the stable prefab with this test.
+6. Only after the single live feed succeeds should the Orange feed be enabled and tested for recursion / cost.
+
