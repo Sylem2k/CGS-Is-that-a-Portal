@@ -135,21 +135,73 @@ class CGS_PortalGunComponent : ScriptComponent
 		}
 		normal.Normalize();
 
-		// Choose a stable in-plane axis. World Y is vertical in Reforger.
-		// For floors/ceilings, choose Z instead to avoid degeneracy.
-		vector referenceUp = Vector(0, 1, 0);
-		if (Math.AbsFloat(vector.Dot(referenceUp, normal)) > 0.90)
-			referenceUp = Vector(0, 0, 1);
+		// The opening must face the PLAYER side of the surface.
+		// Some two-sided wall meshes report their fixed polygon normal even
+		// when hit from behind. Correct it to oppose the incoming shot.
+		if (vector.Dot(normal, aimDirection) > 0)
+			normal = -normal;
 
-		// In Enfusion, vector A * vector B produces the cross product.
-		vector portalRight = referenceUp * normal;
-		portalRight.Normalize();
-		vector portalUp = normal * portalRight;
+		// AUTO SURFACE ORIENTATION:
+		//   Wall    -> portal stands vertically, top aligned to world up.
+		//   Floor   -> portal lies flat and faces up.
+		//   Ceiling -> portal lies flat upside down and faces down.
+		//   Slope   -> follows the actual hit normal without snapping.
+		//
+		// Reforger Y is world vertical; these portal meshes are in LOCAL XZ,
+		// unlike ordinary models whose frontal axis is often local Z.
+		float verticalFacing = Math.AbsFloat(normal[1]);
+		string surfaceType = "WALL";
+		if (normal[1] >= 0.85)
+			surfaceType = "FLOOR";
+		else if (normal[1] <= -0.85)
+			surfaceType = "CEILING";
+		else if (verticalFacing >= 0.4)
+			surfaceType = "SLOPE";
+
+		vector portalUp;
+		if (verticalFacing >= 0.85)
+		{
+			// World-up is parallel to the surface normal on floors and
+			// ceilings, so it CANNOT define an in-plane "top" axis.
+			// Instead use the player's sight direction projected along
+			// that surface. The oval follows the direction of the shot.
+			portalUp = aimDirection - normal * vector.Dot(aimDirection, normal);
+			if (portalUp.LengthSq() < 0.0025)
+			{
+				// Looking exactly vertically? Pick a stable horizontal top.
+				vector worldForward = Vector(0, 0, 1);
+				portalUp = worldForward - normal * vector.Dot(worldForward, normal);
+			}
+		}
+		else
+		{
+			// Walls/slopes should always be upright relative to gravity.
+			vector worldUp = Vector(0, 1, 0);
+			portalUp = worldUp - normal * vector.Dot(worldUp, normal);
+		}
+
+		// Orthonormal right/up/normal frame. Unlike Euler angles this
+		// does not introduce sudden 90/180-degree flips on vertical hits.
+		if (portalUp.LengthSq() < 0.0025)
+		{
+			if (m_bDebug)
+				Print("[CGS GUN ALIGN] Shot rejected: could not build surface frame.");
+			return false;
+		}
 		portalUp.Normalize();
 
-		// The existing Blue test mesh faces LOCAL -Y (axis setting 2).
-		// Orange faces LOCAL +Y (axis setting 1). Build transforms so
-		// their GetPortalBasis() normals both point OUT from the wall.
+		// Enfusion vector * vector is a CROSS product.
+		// right x up = normal (right-handed), important for replication
+		// and character transfer portal-local coordinates.
+		vector portalRight = portalUp * normal;
+		portalRight.Normalize();
+		portalUp = normal * portalRight;
+		portalUp.Normalize();
+
+		// Blueprint model faces were tested with these separate axes:
+		// Blue:   LOCAL -Y is its opening face (m_iFacingAxis=2)
+		// Orange: LOCAL +Y is its opening face (m_iFacingAxis=1)
+		// Both produce the SAME outward portal basis (right/up/normal).
 		EntitySpawnParams params = new EntitySpawnParams();
 		params.TransformMode = ETransformMode.WORLD;
 		params.Transform[0] = portalRight;
@@ -204,6 +256,21 @@ class CGS_PortalGunComponent : ScriptComponent
 
 		spawned.SetPortalOwnerID(shooterId);
 		m_iLastShotTime = now;
+
+		// Compare the actual spawned portal face against the raycast
+		// normal. This exposes model/prefab facing-axis mistakes in
+		// Workbench without altering the working teleport code.
+		if (m_bDebug)
+		{
+			vector actualRight;
+			vector actualUp;
+			vector actualNormal;
+			spawned.GetPortalBasis(actualRight, actualUp, actualNormal);
+			float facingDot = vector.Dot(actualNormal, normal);
+			PrintFormat("[CGS GUN ALIGN] Player=%1 color=%2 surface=%3 hitNormal=%4 portalNormal=%5 alignment=%6 top=%7", shooterId, color, surfaceType, normal, actualNormal, facingDot, actualUp);
+			if (facingDot < 0.90)
+				PrintFormat("[CGS GUN ALIGN] WARNING: Spawned portal face mismatch. color=%1 expectedNormal=%2 actualNormal=%3", color, normal, actualNormal);
+		}
 
 		// Delete only this owner's OLD portal of the SAME color.
 		if (previous && previous != spawned && previous.GetOwner())
