@@ -198,3 +198,43 @@ Expected transfer sequence after walking onto Orange:
 The fall-volume visualization remains the pink rectangle at its top; the actual rescue zone extends downward from it. To compare stock vs safe character teleport, toggle `Safe player teleport` in the destination portal's component. Restore it to ON after comparison.
 
 **Workbench compilation has not been verified** for this revision. If compilation succeeds but a collision death still occurs, collect `[CGS PORTAL PHYSICS]`, `[CGS PORTAL]`, and `KILL SUICIDE` lines together with the position and timestamp to see whether the engine actually moved/cleared character velocity.
+
+
+## Phase 1.7 — Virtual momentum carry (experimental test branch)
+
+Branch: `feature/portal-virtual-momentum` — **not yet compiled or play-tested in Reforger Workbench**.
+
+### Reason
+
+The working floor-to-ceiling portal loop can transfer the character repeatedly without the previous collision deaths. However, Reforger characters have a **non-dynamic Physics body** (`physics.IsDynamic() == false` in our tests), and the normal `CharacterControllerComponent` exposes `GetVelocity()` but no public `SetVelocity()`. Calling `Physics.SetVelocity()` therefore does not reliably impart launch momentum to normal players.
+
+### Experimental mechanism
+
+The new `CGS_PortalMomentumService.c` stores an independent (virtual) velocity for each recently teleported player. On portal entry, the transfer script reads that carried velocity if present (else the controller's), transforms it from source orientation to destination orientation, and limits exit speed using the existing Maximum Exit Speed setting.
+
+For the next few seconds, the service adds virtual gravity and compares its target velocity to the controller's actual velocity. It attempts to correct **only the difference** as small, server-authoritative `BaseGameEntity.Teleport()` offsets. Each offset has a sphere sweep and a terrain-height check. Ordinary character movement, gravity, and collision/damage remain enabled. The service stops when the duration elapses, the character dies, the server stalls for longer than 150 ms, or a correction hits an obstacle.
+
+This is a **kinematic approximation**, *not real engine character-controller momentum*. It can feel choppy, especially in multiplayer, and may not work if engine networking corrects the forced positions. The branch is isolated so the original stable loop remains on `main`.
+
+### Editable settings (both test prefabs)
+
+| Field | Value |
+| --- | --- |
+| EXPERIMENT: carry simulated momentum | Enabled |
+| EXPERIMENT: carry momentum for... | 4.0 seconds |
+| EXPERIMENT: virtual gravity | 9.81 m/s² |
+| EXPERIMENT: largest momentum correction each frame | 0.7 m |
+| EXPRIMENT: max exit speed | 30 m/s (change to 0 only after stability tests) |
+| Safe player teleport | Enabled |
+| Floor FALL_ZONE rescue | Enabled on Orange |
+| Blue/Orange face axes | Blue local -Y (ceiling), Orange local +Y (floor) |
+
+### Tests
+
+1. Check out this branch in GitHub Desktop. Pull, reload Workbench Game scripts, compile. The added file is `Scripts/Game/CGS_Portal/CGS_PortalMomentumService.c`.
+2. **Baseline:** Orange floor below Blue ceiling. Enter Orange and confirm at least three consecutive `FALL_ZONE` transfers with no collision death.
+3. **Acceleration:** Watch `[CGS PORTAL PHYSICS]` logs. `incoming` should represent carried velocity and can become more negative across loops up to the configured exit cap. `[CGS MOMENTUM]` lines report virtual target, native controller velocity, and correction.
+4. **Direction test (after basic safety):** Orient the destination portal to face horizontally into clear open air and jump/fall into the entrance from above. Check whether the transferred downward speed produces horizontal launch movement. Avoid structures/terrain during the initial test.
+5. If motion jitters, collides, snaps back, or becomes unstable, disable `EXPERIMENT: carry simulated momentum` on both prefabs, or return to `main`. Do not attempt production dedicated MP deployment from this experimental branch without an ownership/replication test.
+
+No portal-to-portal distance limit has been added. Original prefabs and GUIDs are preserved.

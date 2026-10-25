@@ -73,6 +73,21 @@ class CGS_PortalComponent : ScriptComponent
 	[Attribute("45", UIWidgets.EditBox, "EXPERIMENT: max exit speed in m/s; 0 means uncapped")]
 	protected float m_fMaxExitSpeed;
 
+	// Normal characters do not have dynamic physics velocity. This mode
+	// remembers velocity across teleports and compensates their movement
+	// in small, collision-swept increments, without disabling damage.
+	[Attribute("0", UIWidgets.CheckBox, "EXPERIMENT: carry simulated momentum after teleport")]
+	protected bool m_bSimulateMomentum;
+
+	[Attribute("4.0", UIWidgets.EditBox, "EXPERIMENT: carry momentum for this many seconds (max 15)")]
+	protected float m_fMomentumCarrySeconds;
+
+	[Attribute("9.81", UIWidgets.EditBox, "EXPERIMENT: virtual gravity in m/s2")]
+	protected float m_fMomentumGravity;
+
+	[Attribute("0.7", UIWidgets.EditBox, "EXPERIMENT: largest momentum correction each frame (meters)")]
+	protected float m_fMomentumMaxStep;
+
 	[Attribute("1", UIWidgets.CheckBox, "Draw +Z exit facing arrow and trigger outline during play")]
 	protected bool m_bShowFacingArrow;
 
@@ -255,6 +270,11 @@ class CGS_PortalComponent : ScriptComponent
 
 	override void EOnFrame(IEntity owner, float timeSlice)
 	{
+		// Once-per-frame server update. The service itself handles duplicate
+		// calls from Blue and Orange in the same frame.
+		if (Replication.IsServer())
+			CGS_PortalMomentumService.Update();
+
 		if (m_bShowFacingArrow)
 			DrawFacingDebug(owner);
 
@@ -450,5 +470,25 @@ class CGS_PortalComponent : ScriptComponent
 	float GetMaxExitSpeed()
 	{
 		return m_fMaxExitSpeed;
+	}
+
+	bool ShouldSimulateMomentum()
+	{
+		return m_bSimulateMomentum;
+	}
+
+	float GetMomentumCarrySeconds()
+	{
+		return m_fMomentumCarrySeconds;
+	}
+
+	float GetMomentumGravity()
+	{
+		return m_fMomentumGravity;
+	}
+
+	float GetMomentumMaxStep()
+	{
+		return m_fMomentumMaxStep;
 	}
 }
