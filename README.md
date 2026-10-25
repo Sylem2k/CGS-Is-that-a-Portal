@@ -319,3 +319,60 @@ This phase converts that prefab into a clean pistol foundation:
 - Keep the unlimited distance **between** paired portals; raycast maximum shot range is separately configurable.
 - Preserve existing fall/return/momentum mechanics and hardening for multiplayer.
 
+
+
+## Phase 2.1 — Personal Blue/Orange gun firing prototype
+
+**Branch:** `feature/portal-gun-personal-firing` — **not compiled or multiplayer play-tested yet**.
+
+The confirmed equippable/holsterable `Portal_Gun_.et` remains unchanged in model, scale, IK and original `.et.meta` GUID. This update only adds `CGS_PortalGunComponent` to that prefab.
+
+### Inputs for the prototype
+
+- **Left mouse button** (native `CharacterFire`) shoots/replaces Blue.
+- **Right mouse button** (native `CharacterWeaponADS`) shoots/replaces Orange.
+- Both use **rising-edge detection**: holding a mouse button does not spam shots.
+- In this prototype, **right-click still shares vanilla ADS/aim**, since no custom input context has been created yet. Replace the shared ADS binding with a dedicated portal action when the gun firing loop is proven in Workbench.
+- Shots only work while `Portal_Gun_.et` is the character's **actively equipped** weapon; they do not affect other weapons.
+- Invalid/no-hit/dynamic surface shots leave existing portals intact.
+- The gun costs no ammo and has a default 200 ms server-side cooldown to avoid duplicates.
+
+### Ownership and replication
+
+The old global Blue/Orange pair in `CGS_PortalManagerComponent.c` was replaced with a **player ID → Blue/Orange pair** map. Legacy stationary portals with owner ID 0 still form their own independent test pair.
+
+- The client's local `SCR_PlayerController` reads inputs and sends a reliable **server RPC on the owning controller**.
+- The authoritative server verifies the player is alive and holding the *exact gun* for the RPC, rate-limits it, validates a camera-origin radius around the character, and performs a server-side surface raycast.
+- It creates the selected portal on the world/static hit surface, attaches that portal to the shooter's pair, and deletes only the shooter's old portal of the same color.
+- A player can own at most one Blue and one Orange portal at a time. Different players' pairs remain isolated.
+- Anyone can walk through any active pair. The manager links portals only within the same owner's pair.
+- Gun-spawned portals are replicated using the existing prefab `RplComponent`. Owner linkage is server-side (teleport handling is already server-authoritative).
+- When an owning player ID disappears from the connected-player list, cleanup deletes their portals. Normal respawning does not remove them.
+
+### Placement
+
+Shot placement uses the camera's position/forward vector validated near the player and a raycast into `TraceFlags.WORLD | TraceFlags.ENTS` (up to **90 m** by default). Moving physics surfaces are rejected. Geometry's collision is **not** removed: the existing early wall approach trigger is required for wall-mounted portals.
+
+The hit normal determines the portal transform in world space. Blue's local face is **-Y**; Orange's is **+Y**. The script constructs separate orthogonal transforms so either prefab faces outward from any floor, wall or ceiling *without Workbench rotation*.
+
+Portal-to-portal travel distance remains unlimited; the 90 m raycast cap is the **gun's placement range only**.
+
+**Current limitations:**
+- Surface-size/planarity checks, special blocked-surface rules, visual invalid-placement feedback, and robust camera/muzzle obstruction rejection still need implementing.
+- Right mouse also invokes Reforger ADS in this first prototype.
+- Shooting/portal replication on dedicated multiplayer still needs user testing.
+- Physics momentum is still the separate experimental kinematic assist, not fully native character velocity.
+- The first test requires manually obtaining the gun (placed in world or inventory); there is not yet an arsenal catalog entry.
+
+### Workbench test sequence
+
+1. Pull branch `feature/portal-gun-personal-firing`, reload Game scripts, and compile. Send any compile errors verbatim.
+2. Equip `Prefabs/Weapons/Core/Portal_Gun_.et` and aim at a broad vertical wall.
+3. Click **LMB** once; watch for `[CGS GUN] Player=... fired color=0`, and a Blue portal should appear.
+4. Click **RMB** once on another wall; watch for `[CGS GUN] Player=... fired color=1`, and an Orange portal should appear.
+5. Walk Blue → Orange and Orange → Blue; confirm the working `WALL_APPROACH` logs.
+6. Click LMB somewhere else: the first Blue should be deleted, new Blue should remain linked with the original Orange. Repeat with RMB for Orange.
+7. Try firing at sky, vehicles and invalid objects to ensure the previous portal remains.
+8. Then test two connected players; confirm both can own their own pairs and travel through either pair.
+
+**New files:** `Scripts/Game/CGS_Portal/CGS_PortalGunComponent.c` and `Scripts/Game/CGS_Portal/CGS_PortalPlayerController.c`. Existing files updated: `CGS_PortalManagerComponent.c`, `CGS_PortalComponent.c`, and `Portal_Gun_.et`.
