@@ -36,8 +36,21 @@ GenericEntity {
    m_fMomentumGravity 9.81
    m_fMomentumMaxStep 0.7
   }
+  // Visual PIP is client-local only; server teleporting is unchanged.
+  // Two nearest eligible portal views share camera slots 26/27 per client.
+  CGS_PortalPIPLiveComponent "{6AB2A753B0000030}" {
+   m_bEnabled 1
+   m_iMaxFPS 12
+   m_fRenderScale 0.5
+   m_fFOV 75
+   m_fCameraOutset 0.25
+   m_fLocalRenderDistance 120
+   m_bMatchPlayerHDR 1
+   m_fHDRMultiplier 1
+   m_bDebug 1
+  }
   MeshObject "{6AB21D04ECC6E03E}" {
-   Object "{654C96CCE67E3142}Common/Models/Portal_Test_Blue.xob"
+   Object "{82397680AD75CA10}Common/Models/Blue_Portal_Frame.xob"
   }
   RplComponent "{6AB20E69D31FBED5}" {
    "Rpl State Override" Runtime
