@@ -99,7 +99,9 @@ class CGS_PortalComponent : ScriptComponent
 
 					// Catch the player IN FRONT of the portal plane, before they
 					// hit a solid floor or wall. Positive local Z is the entry side.
-					float triggerDepth = Math.Max(0.0, m_fFrontCatchDistance);
+					float triggerDepth = m_fFrontCatchDistance;
+					if (triggerDepth < 0)
+						triggerDepth = 0;
 
 					if (previousDepth > triggerDepth && currentDepth <= triggerDepth)
 					{
