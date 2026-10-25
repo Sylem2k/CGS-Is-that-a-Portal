@@ -1,26 +1,25 @@
 //------------------------------------------------------------------------------------------------
-// CGS Portal Gun - player input bridge.
+// CGS Portal Gun - independent primary and secondary input bridge.
 //
-// Uses Reforger's existing CharacterFire and CharacterWeaponADS input actions
-// ONLY when CGS_PortalGunComponent is on the currently selected weapon.
+// LEFT MOUSE -> Blue: keep Reforger CharacterFire, confirmed working.
+// RIGHT MOUSE -> Orange: separate CGSPortalGunOrange action.
+//   Configs/System/chimeraInputCommon.conf binds mouse:button1.
+//   CGSPortalGunContext is activated only while the portal gun is held.
 //
-// LMB -> Blue, RMB -> Orange. On multiplayer clients the request is sent
-// to this player's OWN replicated controller. The server validates the
-// currently equipped gun and performs its own raycast and portal spawn.
-//
-// This first test shares RMB with regular aim/ADS while the portal gun is
-// equipped. A dedicated custom input context can replace it later.
+// Uses one click -> one server-authoritative portal placement. The server
+// validates the gun, color, aim ray and surface before replacing a portal.
 //------------------------------------------------------------------------------------------------
 modded class SCR_PlayerController
 {
 	protected bool m_bCGSWasPrimaryHeld;
 	protected bool m_bCGSWasSecondaryHeld;
+	protected bool m_bCGSInputContextReported;
 
 	override void OnUpdate(float timeSlice)
 	{
 		super.OnUpdate(timeSlice);
 
-		// Only handle the local human's own inputs, never other players.
+		// Only the local human's controller reads this machine's mouse.
 		if (!GetGame() || GetGame().GetPlayerController() != this)
 			return;
 
@@ -28,36 +27,65 @@ modded class SCR_PlayerController
 		if (!inputManager)
 			return;
 
+		// IMPORTANT: Blue is unchanged from the earlier working build.
 		bool primaryHeld = inputManager.GetActionValue("CharacterFire") > 0.5;
-		bool secondaryHeld = inputManager.GetActionValue("CharacterWeaponADS") > 0.5;
 
-		// Rising-edge input: each click places only ONE portal, not one
-		// portal per frame while mouse button is held.
+		CGS_PortalGunComponent equippedGun = CGS_GetEquippedPortalGun();
+		if (!equippedGun || GetGame().GetMenuManager().IsAnyMenuOpen())
+		{
+			// Don't activate the custom secondary context for ordinary guns.
+			// Reset latch when not using the Portal Gun.
+			m_bCGSWasPrimaryHeld = primaryHeld;
+			m_bCGSWasSecondaryHeld = false;
+			m_bCGSInputContextReported = false;
+			return;
+		}
+
+		// This takes mouse:button1 away from vanilla ADS and maps it to
+		// our own Orange action. Re-activate every update while equipped:
+		// contexts are frame-lived in the Enfusion input manager.
+		bool activated = inputManager.ActivateContext("CGSPortalGunContext");
+
+		if (!m_bCGSInputContextReported)
+		{
+			bool actionFound;
+			for (int i = 0; i < inputManager.GetActionCount(); i++)
+			{
+				if (inputManager.GetActionName(i) == "CGSPortalGunOrange")
+				{
+					actionFound = true;
+					break;
+				}
+			}
+
+			PrintFormat("[CGS GUN INPUT] Orange action registered=%1 contextActivated=%2", actionFound, activated);
+			m_bCGSInputContextReported = true;
+		}
+
+		// Read the dedicated action, never CharacterWeaponADS here.
+		bool secondaryHeld = inputManager.GetActionValue("CGSPortalGunOrange") > 0.5;
+
+		// Rising edge prevents placing portals each frame while held.
 		bool primaryPressed = primaryHeld && !m_bCGSWasPrimaryHeld;
 		bool secondaryPressed = secondaryHeld && !m_bCGSWasSecondaryHeld;
 
 		m_bCGSWasPrimaryHeld = primaryHeld;
 		m_bCGSWasSecondaryHeld = secondaryHeld;
 
-		if ((!primaryPressed && !secondaryPressed) || GetGame().GetMenuManager().IsAnyMenuOpen())
-			return;
-
-		CGS_PortalGunComponent equippedGun = CGS_GetEquippedPortalGun();
-		if (!equippedGun)
+		if (!primaryPressed && !secondaryPressed)
 			return;
 
 		vector cameraMatrix[4];
 		GetGame().GetWorld().GetCurrentCamera(cameraMatrix);
 
-		// Prefer primary if two buttons are pressed simultaneously.
+		// Favor Blue only when both buttons were pressed this frame.
 		if (primaryPressed)
 			CGS_RequestPortalShot(0, cameraMatrix[3], cameraMatrix[2]);
-		else if (secondaryPressed)
+		else
 			CGS_RequestPortalShot(1, cameraMatrix[3], cameraMatrix[2]);
 	}
 
-	// The gun must be actively held; it must not activate from a
-	// portal gun lying on the ground or merely sitting in inventory.
+	// The weapon must be actively equipped, not merely in inventory.
 	protected CGS_PortalGunComponent CGS_GetEquippedPortalGun()
 	{
 		ChimeraCharacter playerCharacter = ChimeraCharacter.Cast(GetControlledEntity());
@@ -86,9 +114,9 @@ modded class SCR_PlayerController
 	protected void CGS_RequestPortalShot(int color, vector cameraPosition, vector cameraForward)
 	{
 		PrintFormat("[CGS GUN INPUT] Player=%1 requested color=%2", GetPlayerId(), color);
-		// In Workbench/offline listen host the server may be local.
-		// Server RPCs are not guaranteed to loop back when invoked
-		// through Rpc() from their own authoritative instance.
+
+		// An authority controller does not route its own server RPC
+		// back to itself in every mode. Execute directly in SP/host.
 		if (Replication.IsServer())
 			RpcAsk_CGSPortalGunShoot(color, cameraPosition, cameraForward);
 		else
