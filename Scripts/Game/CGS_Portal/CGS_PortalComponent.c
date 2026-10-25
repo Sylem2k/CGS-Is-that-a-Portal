@@ -17,6 +17,14 @@ class CGS_PortalComponent : ScriptComponent
 	[Attribute("1.0", UIWidgets.EditBox, "Activation distance in meters")]
 	protected float m_fActivationDistance;
 
+	[Attribute("1", UIWidgets.CheckBox, "Print portal diagnostic messages to the server log")]
+	protected bool m_bDebug;
+
+	bool IsDebugEnabled()
+	{
+		return m_bDebug;
+	}
+
 	override void OnPostInit(IEntity owner)
 	{
 		super.OnPostInit(owner);
@@ -26,7 +34,11 @@ class CGS_PortalComponent : ScriptComponent
 	override void EOnInit(IEntity owner)
 	{
 		if (Replication.IsServer())
+			{
 			CGS_PortalManagerComponent.RegisterPortal(this);
+			if (m_bDebug)
+				PrintFormat("[CGS PORTAL] Registered portal ID=%1 at %2", m_iPortalID, owner.GetOrigin());
+		}
 	}
 
 	override void EOnFrame(IEntity owner, float timeSlice)
@@ -54,7 +66,8 @@ class CGS_PortalComponent : ScriptComponent
 			if (vector.DistanceSq(owner.GetOrigin(), character.GetOrigin()) > m_fActivationDistance * m_fActivationDistance)
 				continue;
 
-			CGS_PortalTransferComponent.TryTransfer(character, partner);
+			if (CGS_PortalTransferComponent.TryTransfer(character, partner) && m_bDebug)
+				PrintFormat("[CGS PORTAL] Transfer requested: player=%1 from portal=%2 to portal=%3", playerId, m_iPortalID, partner.GetPortalID());
 		}
 	}
 
