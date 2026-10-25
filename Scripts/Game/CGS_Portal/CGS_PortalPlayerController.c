@@ -143,9 +143,9 @@ modded class SCR_PlayerController
 		RpcDo_CGSPinkTarget(characterID);
 	}
 
-	// PINKIFIER - ANIMATION SAFETY TEST.
-	// Replacing skinned clothing mesh materials can break skeletal poses.
-	// Resolve and count clothing without touching character or clothing render objects.
+	// PINKIFIER - SKIN-ONLY BODY + HEAD TEST.
+	// Apply pink non-recursively to the root body and to at most one
+	// separately identified FACE/HEAD skin mesh. Never touch apparel.
 	[RplRpc(RplChannel.Reliable, RplRcver.Broadcast)]
 	protected void RpcDo_CGSPinkTarget(RplId characterID)
 	{
@@ -171,15 +171,92 @@ modded class SCR_PlayerController
 			return;
 		}
 
-		// Preserve all existing skeletal mesh objects and animation links.
-		// Count matching clothing meshes only; do not recolor during this test.
-		int matched = CGS_CountWearableChildren(character, 0);
-		PrintFormat("[CGS PINKIFIER ANIMATION SAFE TEST] Target=%1 wearable meshes found=%2 material overrides=0", character, matched);
-		if (matched == 0)
-			Print("[CGS PINKIFIER ANIMATION SAFE TEST] No clothing meshes matched on this character.", LogLevel.WARNING);
+		// The non-recursive root-body tint previously colored exposed arms
+		// without the uniform T-pose caused by recoloring worn clothing.
+		VObject bodyMesh = character.GetVObject();
+		if (!bodyMesh)
+		{
+			Print("[CGS PINKIFIER SKIN TEST] Character has no root body mesh.", LogLevel.WARNING);
+			return;
+		}
+
+		SCR_Global.SetMaterial(character, pinkMaterial, false);
+
+		// Character faces may be a separate entity from the base body.
+		// Never paint helmets, uniforms, hair, worn gear, or weapons.
+		int headPainted = CGS_PaintFirstSkinHead(character, pinkMaterial, 0);
+		PrintFormat("[CGS PINKIFIER SKIN TEST] Target=%1 bodyPainted=1 headPainted=%2 clothingPainted=0", character, headPainted);
+		if (headPainted == 0)
+			Print("[CGS PINKIFIER SKIN TEST] Separate head/face mesh not identified; clothes untouched.", LogLevel.WARNING);
 	}
 
-	// Read-only wearable enumeration. No SetObject/SetMaterial calls.
+	// Paint a SINGLE exposed-skin head mesh, if the character has one.
+	// Unlike helmets and other gear, the candidate must be identifiable
+	// as a head/face entity and must not be a wearable or a weapon.
+	protected int CGS_PaintFirstSkinHead(IEntity parent, ResourceName pinkMaterial, int depth)
+	{
+		if (!parent || depth >= 8)
+			return 0;
+
+		IEntity child = parent.GetChildren();
+		int visited = 0;
+		while (child && visited < 96)
+		{
+			IEntity nextChild = child.GetSibling();
+			visited++;
+
+			if (!child.IsDeleted() && !child.FindComponent(WeaponComponent))
+			{
+				if (CGS_IsSkinHead(child) && child.GetVObject())
+				{
+					SCR_Global.SetMaterial(child, pinkMaterial, false);
+					PrintFormat("[CGS PINKIFIER FACE TEST] Applied to head entity=%1", child);
+					return 1;
+				}
+
+				// Do not descend into helmets, uniforms, vests or gear.
+				if (!CGS_IsWearableClothing(child))
+				{
+					if (CGS_PaintFirstSkinHead(child, pinkMaterial, depth + 1) > 0)
+						return 1;
+				}
+			}
+
+			child = nextChild;
+		}
+
+		return 0;
+	}
+
+	// Head skin differs from helmets, hats and headgear.
+	// Require a clearly head/face-like prefab or entity name.
+	protected bool CGS_IsSkinHead(IEntity entity)
+	{
+		if (!entity)
+			return false;
+
+		string hint = entity.GetName();
+		EntityPrefabData prefabData = entity.GetPrefabData();
+		if (prefabData)
+			hint = hint + " " + prefabData.GetPrefabName();
+
+		hint.ToLower();
+
+		if (hint.IndexOf("helmet") != -1 || hint.IndexOf("headgear") != -1)
+			return false;
+		if (hint.IndexOf("hair") != -1 || hint.IndexOf("balaclava") != -1)
+			return false;
+		if (hint.IndexOf("/hats/") != -1 || hint.IndexOf("/masks/") != -1)
+			return false;
+
+		return hint.IndexOf("/heads/") != -1
+			|| hint.IndexOf("/faces/") != -1
+			|| hint.IndexOf("head_") != -1
+			|| hint.IndexOf("face_") != -1
+			|| hint.IndexOf("basehead") != -1;
+	}
+
+	// Inspect wearables without changing clothing. Kept for diagnostics.
 	// Depth and sibling limits protect against unexpected hierarchies.
 	protected int CGS_CountWearableChildren(IEntity parent, int depth)
 	{
@@ -212,7 +289,7 @@ modded class SCR_PlayerController
 		return matched;
 	}
 
-	// Identify likely wearables via entity and prefab naming, for logging only.
+	// Identify likely wearables via entity and prefab naming, for diagnostics.
 	protected bool CGS_IsWearableClothing(IEntity entity)
 	{
 		if (!entity)
