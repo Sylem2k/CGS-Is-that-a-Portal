@@ -13,7 +13,7 @@ MetaFileClass {
     }
     MaterialAssignClass "{6AB25CDF74485E71}" {
      SourceMaterial "CGS_Portal_BLUE_Screen_PLACEHOLDER"
-     AssignedMaterial "{8C3F93353BFE92CA}Common/Models/Data/CGS_Portal_BLUE_Screen_PLACEHOLDER.emat"
+     AssignedMaterial "{6AB25DDA4F021001}Common/Models/Data/CGS_Portal_PIP_Screen_TEST.emat"
     }
    }
    MeshParams {
