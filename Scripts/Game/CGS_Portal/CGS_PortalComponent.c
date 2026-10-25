@@ -51,6 +51,9 @@ class CGS_PortalComponent : ScriptComponent
 	[Attribute("2.5", UIWidgets.EditBox, "Facing arrow length in meters")]
 	protected float m_fFacingArrowLength;
 
+	[Attribute("1", UIWidgets.EditBox, "Portal front axis: 0=+Z, 1=+Y, 2=-Y, 3=-Z, 4=+X, 5=-X")]
+	protected int m_iFacingAxis;
+
 	protected int m_iSuccessfulTransfers;
 
 	protected ref map<IEntity, vector> m_mPreviousPositions = new map<IEntity, vector>();
@@ -74,20 +77,69 @@ class CGS_PortalComponent : ScriptComponent
 		CGS_PortalManagerComponent.RegisterPortal(this);
 		if (m_bDebug)
 		{
-			vector initTransform[4];
-			owner.GetWorldTransform(initTransform);
+			vector right;
+			vector up;
+			vector normal;
+			GetPortalBasis(right, up, normal);
 
 			string facing = "SIDEWAYS";
-			if (initTransform[2][1] > 0.75)
+			if (normal[1] > 0.75)
 				facing = "UP";
-			else if (initTransform[2][1] < -0.75)
+			else if (normal[1] < -0.75)
 				facing = "DOWN";
 
-			PrintFormat("[CGS PORTAL FACING] ID=%1 position=%2 +Z normal=%3 facing=%4", m_iPortalID, initTransform[3], initTransform[2], facing);
+			PrintFormat("[CGS PORTAL FACING] ID=%1 position=%2 faceAxis=%3 normal=%4 facing=%5", m_iPortalID, owner.GetOrigin(), m_iFacingAxis, normal, facing);
 		}
 	}
 
-	// Debug shapes only. The green arrow is the actual +Z EXIT vector.
+	// Return an orthonormal frame for the ACTUAL opening face.
+	// Reforger world Y is vertical. Our current Blender portal planes lie
+	// in local XZ, so local +Y (faceAxis 1) is their top surface.
+	void GetPortalBasis(out vector right, out vector up, out vector normal)
+	{
+		vector axes[4];
+		GetOwner().GetWorldTransform(axes);
+
+		// 0: +Z, the original behavior for a plane modeled in local XY.
+		right = axes[0];
+		up = axes[1];
+		normal = axes[2];
+
+		// 1: +Y, floor portal with original Blender plane lying flat.
+		if (m_iFacingAxis == 1)
+		{
+			right = axes[0];
+			up = -axes[2];
+			normal = axes[1];
+		}
+		// 2: -Y, underside of a ceiling portal using the same flat mesh.
+		else if (m_iFacingAxis == 2)
+		{
+			right = axes[0];
+			up = axes[2];
+			normal = -axes[1];
+		}
+		else if (m_iFacingAxis == 3)
+		{
+			right = -axes[0];
+			up = axes[1];
+			normal = -axes[2];
+		}
+		else if (m_iFacingAxis == 4)
+		{
+			right = -axes[2];
+			up = axes[1];
+			normal = axes[0];
+		}
+		else if (m_iFacingAxis == 5)
+		{
+			right = axes[2];
+			up = axes[1];
+			normal = -axes[0];
+		}
+	}
+
+	// Debug shapes only. The green arrow is the chosen EXIT normal.
 	// The blue/yellow rectangle shows the early entry catch plane.
 	protected void DrawFacingDebug(IEntity owner)
 	{
@@ -98,8 +150,12 @@ class CGS_PortalComponent : ScriptComponent
 		if (length < 0.5)
 			length = 0.5;
 
+		vector rightAxis;
+		vector upAxis;
+		vector direction;
+		GetPortalBasis(rightAxis, upAxis, direction);
+
 		vector origin = transform[3];
-		vector direction = transform[2];
 		vector tip = origin + direction * length;
 		vector wingBase = tip - direction * 0.5;
 		vector segment[2];
@@ -111,17 +167,17 @@ class CGS_PortalComponent : ScriptComponent
 		segment[1] = tip;
 		Shape.CreateLines(Color.GREEN, ShapeFlags.ONCE | ShapeFlags.NOZBUFFER, segment, 2);
 		segment[0] = tip;
-		segment[1] = wingBase + transform[0] * 0.35;
+		segment[1] = wingBase + rightAxis * 0.35;
 		Shape.CreateLines(Color.GREEN, ShapeFlags.ONCE | ShapeFlags.NOZBUFFER, segment, 2);
-		segment[1] = wingBase - transform[0] * 0.35;
+		segment[1] = wingBase - rightAxis * 0.35;
 		Shape.CreateLines(Color.GREEN, ShapeFlags.ONCE | ShapeFlags.NOZBUFFER, segment, 2);
 
 		float catchDistance = m_fFrontCatchDistance;
 		if (catchDistance < 0)
 			catchDistance = 0;
 		vector center = origin + direction * catchDistance;
-		vector right = transform[0] * m_fHalfWidth;
-		vector up = transform[1] * m_fHalfHeight;
+		vector right = rightAxis * m_fHalfWidth;
+		vector up = upAxis * m_fHalfHeight;
 		vector a = center + right + up;
 		vector b = center - right + up;
 		vector c = center - right - up;
@@ -162,6 +218,10 @@ class CGS_PortalComponent : ScriptComponent
 
 		vector portalTransform[4];
 		owner.GetWorldTransform(portalTransform);
+		vector portalRight;
+		vector portalUp;
+		vector portalNormal;
+		GetPortalBasis(portalRight, portalUp, portalNormal);
 
 		foreach (int playerId : players)
 		{
@@ -180,8 +240,8 @@ class CGS_PortalComponent : ScriptComponent
 					vector previousOffset = previousPos - portalTransform[3];
 					vector currentOffset = currentPos - portalTransform[3];
 
-					float previousDepth = vector.Dot(previousOffset, portalTransform[2]);
-					float currentDepth = vector.Dot(currentOffset, portalTransform[2]);
+					float previousDepth = vector.Dot(previousOffset, portalNormal);
+					float currentDepth = vector.Dot(currentOffset, portalNormal);
 
 					// Catch the player IN FRONT of the portal plane, before they
 					// hit a solid floor or wall. Positive local Z is the entry side.
@@ -200,8 +260,8 @@ class CGS_PortalComponent : ScriptComponent
 								float fraction = (previousDepth - triggerDepth) / depthChange;
 								vector crossingPos = previousPos + (currentPos - previousPos) * fraction;
 								vector crossingOffset = crossingPos - portalTransform[3];
-								float sideOffset = vector.Dot(crossingOffset, portalTransform[0]);
-								float upOffset = vector.Dot(crossingOffset, portalTransform[1]);
+								float sideOffset = vector.Dot(crossingOffset, portalRight);
+								float upOffset = vector.Dot(crossingOffset, portalUp);
 
 								if (Math.AbsFloat(sideOffset) <= m_fHalfWidth && Math.AbsFloat(upOffset) <= m_fHalfHeight)
 									shouldTransfer = true;
