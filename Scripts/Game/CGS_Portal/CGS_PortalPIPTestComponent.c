@@ -180,7 +180,7 @@ class CGS_PortalPIPTestComponent : ScriptComponent
 			return 0;
 		}
 
-		const string targetMaterial = "{6AB25DDA4F021001}Common/Models/Data/CGS_Portal_PIP_Screen_TEST.emat";
+		ResourceName targetMaterial = "{6AB25DDA4F021001}Common/Models/Data/CGS_Portal_PIP_Screen_TEST.emat";
 		string expectedSource = "CGS_Portal_BLUE_Screen_PLACEHOLDER";
 		if (m_pPortal && m_pPortal.GetPortalID() == 1)
 			expectedSource = "CGS_Portal_ORANGE_Screen_PLACEHOLDER";
@@ -189,7 +189,7 @@ class CGS_PortalPIPTestComponent : ScriptComponent
 		Resource rtMaterial = Resource.Load(targetMaterial);
 		if (!rtMaterial || !rtMaterial.IsValid())
 		{
-			PrintFormat("[CGS PORTAL PIP MATERIAL] ERROR: Material cannot load: %1", targetMaterial, LogLevel.ERROR);
+			PrintFormat("[CGS PORTAL PIP MATERIAL] ERROR: Material cannot load: %1", targetMaterial, level: LogLevel.ERROR);
 			return 0;
 		}
 
