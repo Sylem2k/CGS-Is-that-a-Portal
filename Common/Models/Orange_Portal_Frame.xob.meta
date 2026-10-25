@@ -13,7 +13,7 @@ MetaFileClass {
     }
     MaterialAssignClass "{6AB25CDF743CE3AA}" {
      SourceMaterial "CGS_Portal_ORANGE_Screen_PLACEHOLDER"
-     AssignedMaterial "{C1AC60B7402BB210}Common/Models/Data/CGS_Portal_ORANGE_Screen_PLACEHOLDER.emat"
+     AssignedMaterial "{6AB25DDA4F021001}Common/Models/Data/CGS_Portal_PIP_Screen_TEST.emat"
     }
    }
    MeshParams {
