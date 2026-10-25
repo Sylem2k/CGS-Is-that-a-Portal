@@ -2,6 +2,7 @@ MetaFileClass {
  Name "{654C96CCE67E3142}Common/Models/Portal_Test_Blue.xob"
  Configurations {
   FBXResourceClass PC {
+   Rotate 0 90 0
    MaterialAssigns {
     MaterialAssignClass "{6AB21AB37ABE4512}" {
      SourceMaterial "DefaultGeneratedMaterial"
