@@ -158,7 +158,7 @@ class CGS_PinkGunComponent : ScriptComponent
 		requester.CGS_PinkBroadcastTarget(targetID);
 
 		if (m_bDebug)
-			PrintFormat("[CGS PINKIFIER] player=%1 validated skin-only test target=%2 id=%3 distance=%4 (root body tint only; head/equipment unchanged)", playerId, target, targetID, range * fraction);
+			PrintFormat("[CGS PINKIFIER] player=%1 validated skin-only test target=%2 id=%3 distance=%4 (root body pink; identity-managed pink head if supported; equipment unchanged)", playerId, target, targetID, range * fraction);
 
 		return true;
 	}
