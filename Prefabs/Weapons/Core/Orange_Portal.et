@@ -15,6 +15,8 @@ GenericEntity {
    m_bShowFacingArrow 1
    m_fFacingArrowLength 2.5
    m_fCrossingStep 6
+   m_bWalkOnFloorEnabled 1
+   m_fWalkOnHeight 1.4
    m_bPreserveMomentum 1
    m_fMomentumMultiplier 1
    m_fMaxExitSpeed 45
