@@ -5,7 +5,7 @@ MetaFileClass {
    MaterialAssigns {
     MaterialAssignClass "{6AB21AB37ABE4512}" {
      SourceMaterial "DefaultGeneratedMaterial"
-     AssignedMaterial "{BC46ACD6072A0B3C}Common/Models/Data/DefaultGeneratedMaterial.emat"
+     AssignedMaterial "{BC46ACD6072A0B3C}Common/Models/Data/Test_Blue.emat"
     }
    }
    MeshParams {
