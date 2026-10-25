@@ -18,6 +18,8 @@ GenericEntity {
    m_fCameraFOV 75
    m_fCameraOutset 0.25
    m_bDebug 1
+   m_bDebugHUD 0
+   m_bUseHorizontalTestView 1
   }
   MeshObject "{6AB25DDA4F023103}" {
    Object "{C2D10223091B0296}Common/Models/Orange_Portal_Frame.xob"
