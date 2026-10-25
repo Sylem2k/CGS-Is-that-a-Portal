@@ -4,7 +4,7 @@
 // Uses the SAME engine pipeline as Reforger's own PIP weapon optics:
 //    RenderTargetWidget.SetWorld(world, cameraIndex)
 //    RTTextureWidget.SetRenderTarget(portalEntity)
-//    BCRMap "$rendertarget" on the portal screen material.
+//    BCRMap + EmissiveMap "$rendertarget" on the ViewPlane material.\n//    Test-only SetObject("$remap...") forces the material on the actual XOB.
 //
 // Add ONLY to the new *_PIP_Test.et prefabs. Existing gameplay portal
 // prefabs, controls, ownership and teleport code remain untouched.
@@ -160,6 +160,90 @@ class CGS_PortalPIPTestComponent : ScriptComponent
 	}
 
 	//------------------------------------------------------------------------------------------------
+	// The source material stored in the XOB is not necessarily the
+	// final .emat visible at runtime. Workbench can retain a cached
+	// imported white placeholder even when XOB.meta contains the correct
+	// MaterialAssigns. The official radar demo fixes this with SetObject
+	// $remap on the mesh entity. We do the same ONLY for the test ViewPlane.
+	//
+	// NOTE: Do not call this for the working player portal prefab.
+	protected int ForceScreenRenderMaterial()
+	{
+		IEntity owner = GetOwner();
+		if (!owner)
+			return 0;
+
+		VObject mesh = owner.GetVObject();
+		if (!mesh)
+		{
+			Print("[CGS PORTAL PIP MATERIAL] ERROR: Test frame entity has no VObject; cannot bind plane material.", LogLevel.ERROR);
+			return 0;
+		}
+
+		const string targetMaterial = "{6AB25DDA4F021001}Common/Models/Data/CGS_Portal_PIP_Screen_TEST.emat";
+		string expectedSource = "CGS_Portal_BLUE_Screen_PLACEHOLDER";
+		if (m_pPortal && m_pPortal.GetPortalID() == 1)
+			expectedSource = "CGS_Portal_ORANGE_Screen_PLACEHOLDER";
+
+		// Verify the asset is loadable before remapping any slot.
+		Resource rtMaterial = Resource.Load(targetMaterial);
+		if (!rtMaterial || !rtMaterial.IsValid())
+		{
+			PrintFormat("[CGS PORTAL PIP MATERIAL] ERROR: Material cannot load: %1", targetMaterial, LogLevel.ERROR);
+			return 0;
+		}
+
+		string materials[256];
+		int count = mesh.GetMaterials(materials);
+		int scanCount = count;
+		if (scanCount > 256)
+			scanCount = 256;
+
+		PrintFormat("[CGS PORTAL PIP MATERIAL] Frame VObject reports %1 material slot(s), expected ViewPlane source='%2'", count, expectedSource);
+		string remap;
+		bool foundExpected;
+		int mapped = 0;
+
+		for (int i = 0; i < scanCount; i++)
+		{
+			string materialName = materials[i];
+			if (materialName.IsEmpty())
+				continue;
+
+			PrintFormat("[CGS PORTAL PIP MATERIAL] Source slot[%1]='%2'", i, materialName);
+
+			bool isScreen = materialName == expectedSource;
+			if (!isScreen && materialName.Contains("CGS_Portal"))
+			{
+				isScreen = materialName.Contains("Screen") || materialName.Contains("ViewPlane");
+			}
+
+			// Strictly avoid remapping Frame/Metal/Glow slots.
+			if (!isScreen)
+				continue;
+
+			remap += string.Format("$remap '%1' '%2';", materialName, targetMaterial);
+			mapped++;
+
+			if (materialName == expectedSource)
+				foundExpected = true;
+		}
+
+		// If GetMaterials only exposes the resolved .emat rather than the
+		// original FBX material slot, try the known source name as well.
+		if (!foundExpected)
+		{
+			remap += string.Format("$remap '%1' '%2';", expectedSource, targetMaterial);
+			PrintFormat("[CGS PORTAL PIP MATERIAL] Expected XOB source not in GetMaterials; adding explicit fallback: %1", expectedSource);
+			mapped++;
+		}
+
+		owner.SetObject(mesh, remap);
+		PrintFormat("[CGS PORTAL PIP MATERIAL] Runtime XOB screen remap issued: count=%1 target=%2", mapped, targetMaterial);
+		return mapped;
+	}
+
+	//------------------------------------------------------------------------------------------------
 	protected bool SetupPreview()
 	{
 		if (!HasLocalRenderer() || !m_pPartner || m_bInitialized)
@@ -258,8 +342,15 @@ class CGS_PortalPIPTestComponent : ScriptComponent
 		// Blue_Portal_PIP_Test.et component in Workbench.
 		if (!m_bDebugHUD)
 		{
+			// Force the imported XOB's screen material slot to the actual
+			// runtime render-target material BEFORE binding the entity.
+			// Old camera/UI reports alone cannot verify this assignment.
+			int remapped = ForceScreenRenderMaterial();
+			if (remapped < 1)
+				Print("[CGS PORTAL PIP MESH] WARNING: No screen material remap was applied. Check imported ViewPlane material.", LogLevel.WARNING);
+
 			m_wRTTexture.SetRenderTarget(GetOwner());
-			Print("[CGS PORTAL PIP MESH] Render target bound to ViewPlane. Camera diagnostic HUD disabled.");
+			PrintFormat("[CGS PORTAL PIP MESH] Render target bound AFTER XOB screen material remap (%1 slot attempts); camera diagnostic HUD disabled.", remapped);
 		}
 		else
 		{
@@ -321,7 +412,7 @@ class CGS_PortalPIPTestComponent : ScriptComponent
 			else
 			{
 				PrintFormat("[CGS PORTAL PIP] LIVE mesh feed bound: color=%1 camera=%2 partner=%3 fps=%4 scale=%5", m_pPortal.GetPortalID(), m_iCameraIndex, m_pPartner.GetPortalID(), fps, scale);
-				Print("[CGS PORTAL PIP MATERIAL] If view remains blank, check *_ViewPlane material resolves to CGS_Portal_PIP_Screen_TEST.emat (BCRMap $rendertarget); reimport frame .xob.");
+				Print("[CGS PORTAL PIP MATERIAL] If still blank, inspect source slot list above: the imported mesh may have a separate ViewPlane entity, stale material cache, or reversed normals.");
 			}
 		}
 		return true;
