@@ -1,4 +1,4 @@
-[ComponentEditorProps(category: "CGS Portal", description: "Prototype player transfer; no momentum or physics-safe relocation yet.")]
+[ComponentEditorProps(category: "CGS Portal", description: "Experimental plane-to-plane player transfer; momentum handling remains unimplemented.")]
 class CGS_PortalTransferComponentClass : ScriptComponentClass
 {
 }
@@ -20,21 +20,24 @@ class CGS_PortalTransferComponent : ScriptComponent
 		int lastTime;
 		if (s_LastTransferTimes.Find(character, lastTime))
 		{
-			if (now - lastTime < 1200)
+			// Crossing detection already filters most bounce-backs.
+			// Keep a short additional safety gap against replication/position jitter.
+			if (now - lastTime < 150)
 				return false;
 		}
 
 		vector transform[4];
 		exitPortal.GetWorldTransform(transform);
-		vector forward = transform[2];
-		vector exitPosition = transform[3] + forward * destination.GetExitOffset();
+		vector exitPosition = transform[3] + transform[2] * destination.GetExitOffset();
 
-		// Initial prototype only: controlled character/physics replication
-		// must be validated in Workbench and on a dedicated server.
+		// Position transfer only. Do not claim momentum preservation before
+		// character-controller/physics ownership has been tested.
 		character.SetOrigin(exitPosition);
 		s_LastTransferTimes.Set(character, now);
+
 		if (destination.IsDebugEnabled())
 			PrintFormat("[CGS PORTAL] SetOrigin executed: destination portal=%1 position=%2 entity=%3", destination.GetPortalID(), exitPosition, character);
+
 		return true;
 	}
 }
