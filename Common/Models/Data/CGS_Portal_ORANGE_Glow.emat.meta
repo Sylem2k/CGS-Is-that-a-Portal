@@ -1,0 +1,17 @@
+MetaFileClass {
+ Name "{8609BF8A92473CB0}Common/Models/Data/CGS_Portal_ORANGE_Glow.emat"
+ Configurations {
+  EMATResourceClass PC {
+  }
+  EMATResourceClass XBOX_ONE : PC {
+  }
+  EMATResourceClass XBOX_SERIES : PC {
+  }
+  EMATResourceClass PS4 : PC {
+  }
+  EMATResourceClass PS5 : PC {
+  }
+  EMATResourceClass HEADLESS : PC {
+  }
+ }
+}

@@ -1,0 +1,17 @@
+MetaFileClass {
+ Name "{C1AC60B7402BB210}Common/Models/Data/CGS_Portal_ORANGE_Screen_PLACEHOLDER.emat"
+ Configurations {
+  EMATResourceClass PC {
+  }
+  EMATResourceClass XBOX_ONE : PC {
+  }
+  EMATResourceClass XBOX_SERIES : PC {
+  }
+  EMATResourceClass PS4 : PC {
+  }
+  EMATResourceClass PS5 : PC {
+  }
+  EMATResourceClass HEADLESS : PC {
+  }
+ }
+}
