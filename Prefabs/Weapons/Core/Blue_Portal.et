@@ -1,0 +1,121 @@
+GenericEntity {
+ ID "6AB20E69D31F3B1D"
+ components {
+  Persistence "{6AB20E69D31F3B15}" {
+  }
+  SignalsManagerComponent "{6AB20E69D31F3B0B}" {
+  }
+  CGS_PortalComponent "{6AB20E69D31F3B06}" {
+  }
+  MeshObject "{6AB20E69D31F3B04}" {
+   InheritVisibility 1
+  }
+  ActionsManagerComponent "{6AB20E69D31F3B02}" {
+   ActionContexts {
+    UserActionContext "{6AB20E69D31F3B7F}" {
+     ContextName "default"
+     Position PointInfo "{6AB20E69D31F3B7A}" {
+     }
+    }
+    UserActionContext "{6AB20E69D31F3B7B}" {
+     UIInfo SCR_ActionContextUIInfo "{608488A963951E31}" : "{970293F8561231D4}Configs/UI/NearbyInteractionContext/NearbyContextWeapons.conf" {
+     }
+     ContextName "bipod"
+     Position PointInfo "{6AB20E69D31F3B78}" {
+     }
+     Radius 0.05
+    }
+    UserActionContext "{6AB20E69D31F3B76}" {
+     UIInfo SCR_ActionContextUIInfo "{608488A95953A22A}" : "{970293F8561231D4}Configs/UI/NearbyInteractionContext/NearbyContextWeapons.conf" {
+     }
+     ContextName "magazine"
+     Radius 0.1
+    }
+    UserActionContext "{6AB20E69D31F3B77}" {
+     UIInfo SCR_ActionContextUIInfo "{608488A95BEC69AC}" : "{970293F8561231D4}Configs/UI/NearbyInteractionContext/NearbyContextWeapons.conf" {
+     }
+     ContextName "firemode"
+     Radius 0.1
+    }
+   }
+   additionalActions {
+    SCR_EquipWeaponAction "{6AB20E69D31F3B72}" {
+     ParentContextList {
+      "default"
+     }
+     UIInfo SCR_ActionUIInfo "{6AB20E69D31F3B70}" {
+      Name "#AR-Inventory_Equip"
+      m_sIconName "pick-up"
+     }
+    }
+    SCR_EquipWeaponHolsterAction "{6AB20E69D31F3B68}" {
+     ParentContextList {
+      "default"
+     }
+     UIInfo SCR_ActionUIInfo "{6AB20E69D31F3B69}" {
+      Name "#AR-Inventory_EquipHolster"
+      m_sIconName "pick-up"
+     }
+     "Sort Priority" 1
+    }
+    SCR_PickUpItemAction "{6AB20E69D31F3B66}" {
+     ParentContextList {
+      "default"
+     }
+     UIInfo SCR_ActionUIInfo "{6AB20E69D31F3B67}" {
+      Name "#AR-Inventory_PickUp"
+      m_sIconName "pick-up"
+     }
+     "Sort Priority" 2
+    }
+    SCR_WeaponAction "{6AB20E69D31F3B65}" {
+     ParentContextList {
+      "bipod"
+     }
+     UIInfo SCR_ActionUIInfo "{6AB20E69D31FBEFA}" {
+      Name "Bipod"
+      m_sIconName "bipod"
+     }
+     m_WeaponActionType Bipod
+    }
+    SCR_ToggleSafetyUserAction "{6AB20E69D31FBEFF}" {
+     ParentContextList {
+      "firemode"
+     }
+     UIInfo SCR_ActionUIInfo "{6AB20E69D31FBEFE}" {
+      Name "#AR-Keybind_WeaponSafety"
+      m_sIconName "not-available"
+     }
+    }
+    SCR_DetachMagazineUserAction "{6AB20E69D31FBEC1}" {
+     ParentContextList {
+      "magazine"
+     }
+     UIInfo SCR_ActionUIInfo "{6AB20E69D31FBEC0}" {
+      Name "#AR-UserAction_Detach"
+      m_sIconName "magazine"
+     }
+    }
+    SCR_FireModeSwitchUserAction "{6AB20E69D31FBEC3}" {
+     ParentContextList {
+      "firemode"
+     }
+     UIInfo SCR_ActionUIInfo "{6AB20E69D31FBED1}" {
+      Name "#AR-ControlsHint_NextFireMode"
+      m_sIconName "availability-full"
+     }
+    }
+   }
+  }
+  NwkPhysicsMovementComponent "{6AB20E69D31FBED3}" {
+  }
+  RplComponent "{6AB20E69D31FBED5}" {
+   "Rpl State Override" Runtime
+   "Parent Node From Parent Entity" 0
+  }
+  Hierarchy "{6AB20E69D31FBED7}" {
+  }
+ }
+ Flags 0x400003 0
+ coords 3.525 -3.07 -2.893
+}
