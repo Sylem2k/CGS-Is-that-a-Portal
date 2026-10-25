@@ -27,6 +27,7 @@ class CGS_PortalMomentumService
 {
 	protected static ref array<ref CGS_PortalMomentumState> s_aActive = {};
 	protected static int s_iLastServiceTick = -1;
+	protected static int s_iMomentumArms;
 
 	// Read our carried momentum when chaining portals; controller velocity may
 	// have been reset by SCR_Global.TeleportPlayer between the portals.
@@ -80,14 +81,15 @@ class CGS_PortalMomentumService
 		state.m_Character = character;
 		state.m_vVirtualVelocity = wantedVelocity;
 		state.m_iLastTickMs = now;
-		state.m_iExpireMs = now + durationSeconds * 1000;
+		state.m_iExpireMs = now + Math.Round(durationSeconds * 1000);
 		state.m_fGravity = gravity;
 		state.m_fMaxStep = maxStep;
 		state.m_bDebug = debugLog;
 		s_aActive.Insert(state);
 
-		if (debugLog)
-			PrintFormat("[CGS MOMENTUM] Armed virtual velocity=%1 duration=%2s gravity=%3", wantedVelocity, durationSeconds, gravity);
+		s_iMomentumArms++;
+		if (debugLog && (s_iMomentumArms <= 3 || s_iMomentumArms % 10 == 0))
+			PrintFormat("[CGS MOMENTUM] Arm #%1 virtualVelocity=%2 duration=%3s gravity=%4", s_iMomentumArms, wantedVelocity, durationSeconds, gravity);
 	}
 
 	// Call from the existing portal EOnFrame. Run ONCE per server frame,
@@ -207,7 +209,7 @@ class CGS_PortalMomentumService
 			baseEntity.Teleport(matrix);
 			state.m_iTicks++;
 
-			if (state.m_bDebug && (state.m_iTicks == 1 || state.m_iTicks % 60 == 0))
+			if (state.m_bDebug && (s_iMomentumArms <= 3 || s_iMomentumArms % 10 == 0) && (state.m_iTicks == 1 || state.m_iTicks % 60 == 0))
 				PrintFormat("[CGS MOMENTUM] tick=%1 wanted=%2 controller=%3 correction=%4", state.m_iTicks, desired, nativeVelocity, correction);
 		}
 	}
