@@ -1,0 +1,28 @@
+// Experimental Pinkifier head appearance.
+// Uses the ORIGINAL animated Head_White_04 prefab, but assigns pink
+// materials at prefab load time. Do not SetObject() on live heads.
+GameEntity : "{32583C88222142FD}Prefabs/Characters/Heads/Head_White_04.et" {
+ ID "529C89342C390093"
+ components {
+  MeshObject "{529C8934211B4893}" {
+   Materials {
+    MaterialAssignClass "{6AB2F1A000000421}" {
+     SourceMaterial "Head_White_04"
+     AssignedMaterial "{6AB2F1A000000100}Common/Models/Data/CGS_Pinkifier_Pink.emat"
+    }
+    MaterialAssignClass "{6AB2F1A000000422}" {
+     SourceMaterial "Head_White_04_wound"
+     AssignedMaterial "{6AB2F1A000000100}Common/Models/Data/CGS_Pinkifier_Pink.emat"
+    }
+    MaterialAssignClass "{6AB2F1A000000423}" {
+     SourceMaterial "Neck"
+     AssignedMaterial "{6AB2F1A000000100}Common/Models/Data/CGS_Pinkifier_Pink.emat"
+    }
+    MaterialAssignClass "{6AB2F1A000000424}" {
+     SourceMaterial "Neck_wound"
+     AssignedMaterial "{6AB2F1A000000100}Common/Models/Data/CGS_Pinkifier_Pink.emat"
+    }
+   }
+  }
+ }
+}
