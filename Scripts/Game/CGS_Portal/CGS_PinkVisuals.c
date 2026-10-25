@@ -13,7 +13,7 @@
 // It does not replace meshes, material resources, animation rigs,
 // inventories, physics objects or network entity identity.
 //
-// Only touch EQUIPPED clothing slots returned by
+// Do NOT tint the animated character root. Only touch EQUIPPED clothing slots returned by
 // EquipedLoadoutStorageComponent.GetClothFromArea(), not all children
 // (a character can have hundreds of inventory child entities).
 //
@@ -51,10 +51,10 @@ class CGS_PinkVisuals
 		int painted = 0;
 		int slotsFound = 0;
 
-		// Some character prefabs support a material instance directly.
-		// If absent, do not attempt a mesh/material replacement.
-		painted += TintOneEntity(character);
-
+		// CRASH-SAFETY: Do NOT touch the animated character root/body
+		// on this first test. Only apply safe material-INSTANCE color
+		// changes to attached EQUIPPED garment entities.
+		// This deliberately leaves skin/head/body materials intact.
 		EquipedLoadoutStorageComponent equipped = EquipedLoadoutStorageComponent.Cast(character.FindComponent(EquipedLoadoutStorageComponent));
 		if (!equipped)
 		{
