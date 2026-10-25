@@ -212,10 +212,18 @@ class CGS_PortalPIPLiveComponent : ScriptComponent
 		}
 
 		// Stop prior pass(es) BEFORE reusing their camera slot(s).
-		if (s_pBestFirst && s_pBestFirst != first && s_pBestFirst != second)
+		// Even when A merely swaps from slot 26 to 27, it MUST release
+		// 26 first, or the next portal might render into the same slot.
+		if (s_pBestFirst && s_pBestFirst != first)
 			s_pBestFirst.StopRender();
 
-		if (s_pBestSecond && s_pBestSecond != first && s_pBestSecond != second)
+		if (s_pBestSecond && s_pBestSecond != second && s_pBestSecond != s_pBestFirst)
+			s_pBestSecond.StopRender();
+
+		// If the former first moves to second, it was already stopped.
+		// If the former second moves to first, it still has slot 27:
+		// stop it too before assigning slot 26.
+		if (s_pBestSecond && s_pBestSecond != second)
 			s_pBestSecond.StopRender();
 
 		s_pBestFirst = first;
