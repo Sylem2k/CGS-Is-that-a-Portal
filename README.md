@@ -281,3 +281,41 @@ To support that:
 6. If a trigger does not fire, provide `[CGS PORTAL WALL CHECK]` lines, facing normals and video.
 
 Wall-entry assistance is a test affordance: it may activate a short distance before actual surface crossing and is not yet tuned for every possible mounted geometry.
+
+
+## Phase 2.0 — Portal gun pistol prefab foundation
+
+**Branch:** `feature/portal-gun-pistol-base` (Workbench compile and equip test pending)
+
+The user pushed `Prefabs/Weapons/Core/Portal_Gun_.et`, which is a full `GenericEntity` prefab containing weapon, inventory, replication, sound, and pickup components. **Keep the original filename `Portal_Gun_.et` and its existing `.et.meta` GUID `{1B677D5095315BED}`; do not rename or reimport it.**
+
+This phase converts that prefab into a clean pistol foundation:
+
+- Assign existing model: `{A4EB7B72BC9B1048}Common/Models/Portal_Gun.xob`
+- Set weapon category `Handgun`, slot `secondary`, display name **CGS Portal Gun**, and item physical properties
+- Use stock M9 pistol animation assets `player_main_pistol.asi` and `p_m9_ik.anm` as *temporary* hand/weapon pose references; adjust custom grip pose after seeing the gun in game
+- Keep `WeaponComponent`, `SCR_WeaponAttachmentsStorageComponent`, equip/holster/pickup actions, `WeaponAnimationComponent`, `RplComponent`, `NwkPhysicsMovementComponent`, `SignalsManagerComponent`, `Persistence`, and `Hierarchy`
+- Add 1.5 kg `RigidBody` with model geometry enabled (check that the imported XOB supplies usable weapon collision geometry)
+- Remove leftover bipod, magazine detach, fire-mode, safety user actions; their unused contexts; default recoil-camera shake; magazine HUD config; and firearm gamepad trigger effects
+- Keep `WeaponSoundComponent` for later custom portal shot and handling audio
+- Remove the missing `eye` pivot from `SightsPosition` until suitable model pivots have been authored
+
+**This is the equippable weapon base, not a firing portal weapon yet.** The copied prefab has no `MuzzleComponent`/fire modes, so standard primary/secondary weapon firing does not currently place portals. Do not add a live-ammunition muzzle or pretend it can fire already.
+
+### Workbench validation required
+
+1. Pull `feature/portal-gun-pistol-base` and compile.
+2. Add `Portal_Gun_.et` to an inventory or spawn it in the test world; verify it appears and that pickup, equip, stow and drop work.
+3. Verify 1P and 3P hand poses and animation alignment. The imported model may require custom grip and aim pivots.
+4. Verify weapon collision geometry; if there are rigidbody errors, supply a physics LOD for the XOB or revise the RigidBody settings.
+5. Confirm the existing fixed Blue/Orange test portals still function. This branch does not modify their scripts or prefabs.
+
+### Next code phase — per-player portal gun shooting
+
+- Add server-side map of player owner ID -> Blue and Orange portal instances; replace same-color portal without touching another player's pair. Keep stationary test pair isolated.
+- Add client-side key actions/weapon checks for *primary attack = Blue* and *secondary attack = Orange* without hijacking unrelated guns' ADS.
+- Send color/shot intent to server with validated owner identity and a rate limit. Server raycasts valid surfaces and applies collision-safe alignment using actual hit normal and the spawned portal model's local front axis.
+- Spawn the colored portal prefab with replication, update partner registry, and delete the owner's previous same-color portal only **after** validating a successful new placement.
+- Keep the unlimited distance **between** paired portals; raycast maximum shot range is separately configurable.
+- Preserve existing fall/return/momentum mechanics and hardening for multiplayer.
+
