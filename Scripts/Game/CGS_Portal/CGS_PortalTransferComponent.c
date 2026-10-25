@@ -33,6 +33,8 @@ class CGS_PortalTransferComponent : ScriptComponent
 		// must be validated in Workbench and on a dedicated server.
 		character.SetOrigin(exitPosition);
 		s_LastTransferTimes.Set(character, now);
+		if (destination.IsDebugEnabled())
+			PrintFormat("[CGS PORTAL] SetOrigin executed: destination portal=%1 position=%2 entity=%3", destination.GetPortalID(), exitPosition, character);
 		return true;
 	}
 }
