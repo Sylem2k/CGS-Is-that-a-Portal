@@ -42,8 +42,21 @@ GenericEntity {
   }
   Hierarchy "{6AB20E69F5EA96A8}" {
   }
+  // Visual PIP is client-local only; server teleporting is unchanged.
+  // Two nearest eligible portal views share camera slots 26/27 per client.
+  CGS_PortalPIPLiveComponent "{6AB2A753B0000031}" {
+   m_bEnabled 1
+   m_iMaxFPS 12
+   m_fRenderScale 0.5
+   m_fFOV 75
+   m_fCameraOutset 0.25
+   m_fLocalRenderDistance 120
+   m_bMatchPlayerHDR 1
+   m_fHDRMultiplier 1
+   m_bDebug 1
+  }
   MeshObject "{6AB21D04F1669F63}" {
-   Object "{654C96CCE67E3143}Common/Models/Portal_Test_Orange.xob"
+   Object "{C2D10223091B0296}Common/Models/Orange_Portal_Frame.xob"
   }
  }
  Flags 0x400003 0
