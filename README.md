@@ -504,3 +504,55 @@ I kept the proven firing and traversal system and updated only `Scripts/Game/CGS
 - Test same-color replacement and separate players' pairs, to confirm no regressions.
 
 **Known limitations:** Only static collision surfaces are supported. This patch aligns the *portal opening*, not the *character's rotation* after teleportation; the existing safe-player teleport intentionally preserves upright player facing. Portal surface-size validation and clipping into narrow/uneven walls remain future work.
+
+
+## Phase 2.2b — Prevent exit portal from immediately teleporting the player back
+
+**Branch:** `fix/portal-exit-reentry-loop`. Workbench compile and runtime validation pending.
+
+### User report and video analysis
+User can place both colored portals, but on approaching a floor portal they appear to move/jump away. The 14-second video shows that both portals spawn once, at stationary world coordinates, and later the camera/view jumps repeatedly. The Workbench log identifies the exact cause:
+
+```
+[CGS PORTAL] Transfer #1 player=1 portal 0 to 1 entry=WALK_ON
+[CGS PORTAL] Transfer #1 player=1 portal 1 to 0 entry=FALL_ZONE
+[CGS PORTAL] Transfer #2 player=1 portal 0 to 1 entry=PLANE
+[CGS PORTAL] Transfer #2 player=1 portal 1 to 0 entry=FALL_ZONE
+```
+
+Both portals were fired onto the ground. The Orange prefab has **FUN MODE: fall-catch assist** enabled, with a **3.5m-deep** catch zone and **5m half-width and half-length**. A traveler stepping through Blue emerges roughly **2.5m** above Orange—**already inside Orange's fall-catch volume**. The destination portal catches that *same traveler* again and sends them back immediately. The existing 150ms global cooldown is too short to prevent this repeated bounce.
+
+### Fix: per-traveler destination portal re-entry lock
+
+The patch changes only:
+- `Scripts/Game/CGS_Portal/CGS_PortalTransferComponent.c`
+- `Scripts/Game/CGS_Portal/CGS_PortalComponent.c`
+
+On successful teleport:
+1. Record the destination portal for **that specific character** as protected against immediate re-entry, with a 400ms minimum protection period.
+2. Clear the prior entry-position samples from **both** source and destination portal. A large teleport should not be processed as a player crossing an entry plane.
+3. While that traveler remains inside the destination's *full* capture area, the destination does **not** transfer them back. Floor FUN MODE uses its expanded fall zone, not just the visible oval, when measuring that area. Other players remain free to enter.
+4. Once the traveler physically exits that area (after the short minimum protection), automatically lift their protection. The player can then approach/walk/fall into the portal again normally.
+5. When a protected portal is deleted/replaced, remove it from all pending re-entry records to avoid stale references. This works with the existing one-Blue/one-Orange replacement system.
+
+Diagnostic messages:
+
+```
+[CGS PORTAL REENTRY] Protected character=... from immediate re-entry at exit portal=1
+[CGS PORTAL REENTRY] Player cleared exit area: portal=1; re-entry armed
+```
+
+### Workbench test sequence
+
+1. Pull branch, compile Game scripts and spawn the existing gun.
+2. Fire Blue (**left mouse**) and Orange (**middle mouse**) on two separate flat ground patches, as in the provided video.
+3. Walk onto Blue. Expected: **one** `0 to 1 entry=WALK_ON` transfer, followed by a stationary character exiting above Orange; **no immediate** `1 to 0 entry=FALL_ZONE` transfer loop.
+4. Move away from the exit area; look for the `re-entry armed` message. Then deliberately re-enter Orange to check the return route.
+5. Repeat with each portal on a wall and floor/ceiling. Test wall-to-wall traversals and fall-entry from high above an upward-facing floor portal.
+6. Replace Orange and Blue with new shots; check that old portal deletion doesn't lock the new portal.
+7. Multiplayer follow-up: two players entering the same pair should be independent.
+
+The placement transform, auto wall/floor/ceiling rotation, model scale, input controls, ownership, and momentum remain unchanged.
+
+**Important:** The video supports a rapid *player teleportation loop*, not proof that either portal entity changes its world transform. If a portal still physically shifts after this fix, collect before/after entity position logs and separately investigate its transform/parenting; do not add an entity-position lock based on this clip alone.
+
