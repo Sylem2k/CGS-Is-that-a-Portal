@@ -29,6 +29,9 @@ class CGS_PortalComponent : ScriptComponent
 	[Attribute("2.0", UIWidgets.EditBox, "Portal half-height in meters")]
 	protected float m_fHalfHeight;
 
+	[Attribute("1.0", UIWidgets.EditBox, "Front-side catch distance (meters); catches player before hitting solid floor/wall")]
+	protected float m_fFrontCatchDistance;
+
 	[Attribute("2.0", UIWidgets.EditBox, "Maximum crossing step distance in meters")]
 	protected float m_fCrossingStep;
 
@@ -93,17 +96,28 @@ class CGS_PortalComponent : ScriptComponent
 
 					float previousDepth = vector.Dot(previousOffset, portalTransform[2]);
 					float currentDepth = vector.Dot(currentOffset, portalTransform[2]);
-					float sideOffset = vector.Dot(currentOffset, portalTransform[0]);
-					float upOffset = vector.Dot(currentOffset, portalTransform[1]);
 
-					// A crossing from the portal's front (positive Z) to its back.
-					// Prevent a long-distance jump being interpreted as a crossing.
-					if (previousDepth > 0 && currentDepth <= 0)
+					// Catch the player IN FRONT of the portal plane, before they
+					// hit a solid floor or wall. Positive local Z is the entry side.
+					float triggerDepth = Math.Max(0.0, m_fFrontCatchDistance);
+
+					if (previousDepth > triggerDepth && currentDepth <= triggerDepth)
 					{
 						if (vector.DistanceSq(previousPos, currentPos) <= m_fCrossingStep * m_fCrossingStep)
 						{
-							if (Math.AbsFloat(sideOffset) <= m_fHalfWidth && Math.AbsFloat(upOffset) <= m_fHalfHeight)
-								shouldTransfer = true;
+							// Check the crossing point, not the end-of-frame location.
+							float depthChange = previousDepth - currentDepth;
+							if (depthChange > 0.0001)
+							{
+								float fraction = (previousDepth - triggerDepth) / depthChange;
+								vector crossingPos = previousPos + (currentPos - previousPos) * fraction;
+								vector crossingOffset = crossingPos - portalTransform[3];
+								float sideOffset = vector.Dot(crossingOffset, portalTransform[0]);
+								float upOffset = vector.Dot(crossingOffset, portalTransform[1]);
+
+								if (Math.AbsFloat(sideOffset) <= m_fHalfWidth && Math.AbsFloat(upOffset) <= m_fHalfHeight)
+									shouldTransfer = true;
+							}
 						}
 					}
 				}
