@@ -1,0 +1,28 @@
+// Pinkifier skin-only appearance for the vanilla Asian_02 head.
+// Inherit the vanilla head prefab to preserve head attachments and animation.
+// Override material slots in the prefab; do NOT use SetObject on live heads.
+GameEntity : "{24D28E910BF9F648}Prefabs/Characters/Heads/Head_Asian_02.et" {
+ ID "529C89342C390093"
+ components {
+  MeshObject "{529C8934211B4893}" {
+   Materials {
+    MaterialAssignClass "{6AB2F1A000000431}" {
+     SourceMaterial "Head_Asian_02"
+     AssignedMaterial "{6AB2F1A000000100}Common/Models/Data/CGS_Pinkifier_Pink.emat"
+    }
+    MaterialAssignClass "{6AB2F1A000000432}" {
+     SourceMaterial "Head_Asian_02_wound"
+     AssignedMaterial "{6AB2F1A000000100}Common/Models/Data/CGS_Pinkifier_Pink.emat"
+    }
+    MaterialAssignClass "{6AB2F1A000000433}" {
+     SourceMaterial "Neck"
+     AssignedMaterial "{6AB2F1A000000100}Common/Models/Data/CGS_Pinkifier_Pink.emat"
+    }
+    MaterialAssignClass "{6AB2F1A000000434}" {
+     SourceMaterial "Neck_wound"
+     AssignedMaterial "{6AB2F1A000000100}Common/Models/Data/CGS_Pinkifier_Pink.emat"
+    }
+   }
+  }
+ }
+}
