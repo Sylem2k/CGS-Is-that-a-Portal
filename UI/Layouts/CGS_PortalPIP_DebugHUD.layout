@@ -1,0 +1,23 @@
+// TEMPORARY LOCAL DEBUG OVERLAY, enabled on Blue test component only.
+// If this HUD image shows Orange's camera but the blue in-world plane
+// stays blank, the error is the frame's screen material / XOB mapping.
+// If both HUD and plane are blank, inspect camera and render-target logs.
+FrameWidgetClass {
+ Name "rootFrame"
+ {
+  ImageWidgetClass "{6AB25DDA4F038011}" {
+   Name "PIPDebugImage"
+   Slot FrameWidgetSlot "{6AB25DDA4F038012}" {
+    PositionX 24
+    OffsetLeft 24
+    PositionY 80
+    OffsetTop 80
+    SizeX 256
+    OffsetRight -280
+    SizeY 256
+    OffsetBottom -336
+   }
+   Color 1 1 1 1
+  }
+ }
+}
