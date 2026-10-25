@@ -270,9 +270,17 @@ class CGS_PortalGunComponent : ScriptComponent
 			vector actualNormal;
 			spawned.GetPortalBasis(actualRight, actualUp, actualNormal);
 			float facingDot = vector.Dot(actualNormal, normal);
-			PrintFormat("[CGS GUN ALIGN] Player=%1 color=%2 surface=%3 hitNormal=%4 portalNormal=%5 alignment=%6 top=%7", shooterId, color, surfaceType, normal, actualNormal, facingDot, actualUp);
-			if (facingDot < 0.90)
-				PrintFormat("[CGS GUN ALIGN] WARNING: Spawned portal face mismatch. color=%1 expectedNormal=%2 actualNormal=%3", color, normal, actualNormal);
+
+			// Separate visual-axis check: old logs only validated the
+			// logical portal basis, which was aligned even when the NEW
+			// imported frame was visibly rolled by 90 degrees.
+			vector visualTransform[4];
+			entity.GetWorldTransform(visualTransform);
+			float visualDot = vector.Dot(visualTransform[2], normal);
+
+			PrintFormat("[CGS GUN ALIGN] Player=%1 color=%2 surface=%3 hitNormal=%4 portalNormal=%5 alignment=%6 top=%7 visualLocalZ=%8 visualAlignment=%9", shooterId, color, surfaceType, normal, actualNormal, facingDot, actualUp, visualTransform[2], visualDot);
+			if (facingDot < 0.90 || visualDot < 0.90)
+				PrintFormat("[CGS GUN ALIGN] WARNING: Spawned portal frame is not aligned to hit surface. color=%1 expectedNormal=%2 portalNormal=%3 visualLocalZ=%4", color, normal, actualNormal, visualTransform[2]);
 		}
 
 		// Delete only this owner's OLD portal of the SAME color.
