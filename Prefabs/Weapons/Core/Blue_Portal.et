@@ -5,12 +5,12 @@ GenericEntity {
    m_iPortalID 0
    m_bEnabled 1
    m_fExitOffset 1.5
-   m_fActivationDistance 1
+   m_fActivationDistance 2
    m_bDebug 1
    m_bUsePlaneCrossing 1
-   m_fHalfWidth 1
-   m_fHalfHeight 1.5
-   m_fCrossingStep 0.6
+   m_fHalfWidth 1.5
+   m_fHalfHeight 2
+   m_fCrossingStep 2
   }
   MeshObject "{6AB21D04ECC6E03E}" {
    Object "{654C96CCE67E3142}Common/Models/Portal_Test_Blue.xob"
