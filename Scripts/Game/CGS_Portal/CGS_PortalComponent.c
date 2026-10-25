@@ -154,7 +154,11 @@ class CGS_PortalComponent : ScriptComponent
 	override void OnDelete(IEntity owner)
 	{
 		if (Replication.IsServer())
+		{
+			// A deleted/replaced portal must not remain in the exit guard.
+			CGS_PortalTransferComponent.ForgetDeletedPortal(this);
 			CGS_PortalManagerComponent.UnregisterPortal(this);
+		}
 		super.OnDelete(owner);
 	}
 
@@ -185,6 +189,68 @@ class CGS_PortalComponent : ScriptComponent
 
 			PrintFormat("[CGS PORTAL FACING] ID=%1 position=%2 faceAxis=%3 normal=%4 facing=%5", m_iPortalID, owner.GetOrigin(), m_iFacingAxis, normal, facing);
 		}
+	}
+
+	// Called after a successful transfer to prevent the previous position
+	// (in a different part of the world) being treated as a new crossing.
+	void ResetEntryHistory(IEntity character)
+	{
+		if (!character)
+			return;
+
+		m_mPreviousPositions.Remove(character);
+		m_mLastWallDebugTimes.Remove(character);
+	}
+
+	// Whether this point is still inside this portal's FULL catch area.
+	// This is used ONLY to re-arm an exit portal after its traveller
+	// actually departs the area. It does not change entry detection.
+	bool IsWithinExitCaptureArea(vector worldPosition)
+	{
+		IEntity portalEntity = GetOwner();
+		if (!portalEntity)
+			return false;
+
+		vector portalRight;
+		vector portalUp;
+		vector portalNormal;
+		GetPortalBasis(portalRight, portalUp, portalNormal);
+
+		vector delta = worldPosition - portalEntity.GetOrigin();
+
+		float halfWidth = m_fHalfWidth;
+		float halfHeight = m_fHalfHeight;
+		float frontLimit = m_fFrontCatchDistance;
+
+		// The Orange floor portal's FUN MODE uses a WIDER fall zone than
+		// its visible oval. Without including that volume, a traveller
+		// could be re-armed while still inside the catch trigger.
+		if (m_bFallCatchAssist && portalNormal[1] > 0.75)
+		{
+			if (m_fFallCatchHalfWidth > halfWidth)
+				halfWidth = m_fFallCatchHalfWidth;
+			if (m_fFallCatchHalfLength > halfHeight)
+				halfHeight = m_fFallCatchHalfLength;
+			if (m_fFallCatchHeight > frontLimit)
+				frontLimit = m_fFallCatchHeight;
+		}
+
+		// Wall entry has its own depth; include it when checking whether
+		// a character has properly cleared the exit.
+		if (m_bWallEntryAssist && Math.AbsFloat(portalNormal[1]) < 0.6)
+		{
+			if (m_fWallEntryDistance > frontLimit)
+				frontLimit = m_fWallEntryDistance;
+		}
+
+		// Small hysteresis margin avoids re-arm flicker on zone edges.
+		float margin = 0.65;
+		float side = Math.AbsFloat(vector.Dot(delta, portalRight));
+		float height = Math.AbsFloat(vector.Dot(delta, portalUp));
+		float depth = vector.Dot(delta, portalNormal);
+
+		return side <= halfWidth + margin && height <= halfHeight + margin
+			&& depth >= -margin && depth <= frontLimit + margin;
 	}
 
 	// Return an orthonormal frame for the ACTUAL opening face.
@@ -361,6 +427,17 @@ class CGS_PortalComponent : ScriptComponent
 				continue;
 
 			vector currentPos = character.GetOrigin();
+
+			// The portal that the player JUST emerged from must not
+			// immediately grab them again. In particular, Orange's
+			// wide FALL_ZONE covers the normal floor-portal exit height.
+			// Update previous position even while entry is suppressed.
+			if (CGS_PortalTransferComponent.IsExitEntrySuppressed(character, this))
+			{
+				m_mPreviousPositions.Set(character, currentPos);
+				continue;
+			}
+
 			bool shouldTransfer = false;
 			string entryMode = "PLANE";
 
