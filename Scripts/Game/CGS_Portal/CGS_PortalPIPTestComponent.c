@@ -30,7 +30,7 @@ class CGS_PortalPIPTestComponent : ScriptComponent
 	[Attribute("20", UIWidgets.EditBox, "LOCAL camera index. Use 20 for Blue, 21 for Orange; never reuse a camera slot in the same client.")]
 	protected int m_iCameraIndex;
 
-	[Attribute("{EF091399D840192D}UI/layouts/Sights/PictureInPictureSightsLayout.layout", UIWidgets.ResourceNamePicker, "Use engine PIP scope layout (contains RTTexture0 and RenderTarget0)", "layout")]
+	[Attribute("{6AB25DDA4F028000}UI/Layouts/CGS_PortalPIP_Test.layout", UIWidgets.ResourceNamePicker, "Portal-specific PIP test layout: 512 x 512 RTTexture0 + RenderTarget0", "layout")]
 	protected ResourceName m_sPIPLayout;
 
 	[Attribute("12", UIWidgets.EditBox, "Target PIP FPS (first test: 12)")]
@@ -56,8 +56,12 @@ class CGS_PortalPIPTestComponent : ScriptComponent
 	protected ref Widget m_wUIRoot;
 	protected RTTextureWidget m_wRTTexture;
 	protected RenderTargetWidget m_wView;
+	protected ScriptCamera m_pFeedCamera;
 	protected bool m_bLoggedNoPartner;
 	protected bool m_bInitialized;
+	protected bool m_bStartScheduled;
+	protected float m_fDiagnosticClock;
+	protected bool m_bPrintedCameraReadback;
 
 	//------------------------------------------------------------------------------------------------
 	override void OnPostInit(IEntity owner)
@@ -126,14 +130,55 @@ class CGS_PortalPIPTestComponent : ScriptComponent
 
 		if (m_iCameraIndex < 1 || m_iCameraIndex > 31)
 		{
-			PrintFormat("[CGS PORTAL PIP] Invalid camera index %1 (valid 1-31)", m_iCameraIndex);
+			PrintFormat("[CGS PORTAL PIP] ERROR: Invalid camera slot %1 (valid 1-31)", m_iCameraIndex);
 			return false;
 		}
 
+		BaseWorld world = GetOwner().GetWorld();
+		if (!world)
+			return false;
+
+		// FIX: A render target can bind successfully even if it is showing
+		// EMPTY pixels. The original prototype configured a world camera
+		// slot and called SetCameraEx, but never spawned a ScriptCamera.
+		//
+		// Both stock Reforger PIP optics and the user-provided, formerly
+		// working SVC CCTV mod create a camera ENTITY, set its index,
+		// and keep its transform up-to-date. Do that BEFORE the layout.
+		m_pFeedCamera = ScriptCamera.Cast(GetGame().SpawnEntity(ScriptCamera, world));
+		if (!m_pFeedCamera)
+		{
+			Print("[CGS PORTAL PIP] ERROR: Could not spawn ScriptCamera for the remote view.");
+			return false;
+		}
+
+		float fov = Math.Clamp(m_fCameraFOV, 25.0, 110.0);
+		m_pFeedCamera.Index = m_iCameraIndex;
+		m_pFeedCamera.FreeFly = false;
+		m_pFeedCamera.FOV = fov;
+		m_pFeedCamera.NearPlane = 0.05;
+		m_pFeedCamera.FarPlane = 1200.0;
+
+		// Set the camera transform BEFORE allocating any render target.
+		// ScriptCamera.EOnPostFrame also re-applies its transform to
+		// this world camera slot. Force FreeFly=false every frame.
+		UpdatePartnerCamera();
+
+		// Script-created cameras do not automatically apply their
+		// index/FOV/clip values like an authored camera prefab does.
+		world.SetCameraVerticalFOV(m_iCameraIndex, fov);
+		world.SetCameraNearPlane(m_iCameraIndex, 0.05);
+		world.SetCameraFarPlane(m_iCameraIndex, 1200.0);
+		world.SetCameraType(m_iCameraIndex, CameraType.PERSPECTIVE);
+		world.SetCameraLensFlareSet(m_iCameraIndex, CameraLensFlareSetType.FirstPerson, string.Empty);
+
+		// Use our own known 512px layout, not a potentially masked
+		// stock rifle-optics layout.
 		m_wUIRoot = GetGame().GetWorkspace().CreateWidgets(m_sPIPLayout);
 		if (!m_wUIRoot)
 		{
-			Print("[CGS PORTAL PIP] Failed to create stock PictureInPictureSightsLayout.layout.");
+			PrintFormat("[CGS PORTAL PIP] ERROR: Failed to create layout %1", m_sPIPLayout);
+			DestroyPreview();
 			return false;
 		}
 
@@ -141,27 +186,18 @@ class CGS_PortalPIPTestComponent : ScriptComponent
 		m_wView = RenderTargetWidget.Cast(m_wUIRoot.FindAnyWidget("RenderTarget0"));
 		if (!m_wRTTexture || !m_wView)
 		{
-			Print("[CGS PORTAL PIP] Stock PIP layout missing RTTexture0 or RenderTarget0.");
+			Print("[CGS PORTAL PIP] ERROR: Test layout is missing RTTexture0 or RenderTarget0");
 			DestroyPreview();
 			return false;
 		}
 
-		BaseWorld world = GetOwner().GetWorld();
-		float fov = m_fCameraFOV;
-		if (fov < 25)
-			fov = 25;
-		if (fov > 110)
-			fov = 110;
-
-		world.SetCameraType(m_iCameraIndex, CameraType.PERSPECTIVE);
-		world.SetCameraVerticalFOV(m_iCameraIndex, fov);
-		world.SetCameraNearPlane(m_iCameraIndex, 0.10);
-		world.SetCameraFarPlane(m_iCameraIndex, 600);
-
-		// The PIP scope uses precisely this two-widget render pipeline.
+		// Preserve the known working CCTV/weapon scope order:
+		// camera -> widget layout -> SetWorld -> scale -> SetRenderTarget.
 		m_wView.SetWorld(world, m_iCameraIndex);
+
 		float scale = Math.Clamp(m_fResolutionScale, 0.2, 1.0);
 		m_wView.SetResolutionScale(scale, scale);
+		m_wView.SetVisible(true);
 
 		int fps = m_iMaxFPS;
 		if (fps < 1)
@@ -171,21 +207,38 @@ class CGS_PortalPIPTestComponent : ScriptComponent
 		m_wView.SetMaxFPS(fps);
 		m_wView.SetRefresh(1, 0);
 
-		// This affects ONLY the mesh sections using BCRMap "$rendertarget".
-		// Our test prefab points its screen material at that shader, while
-		// the metal frame and glow keep their existing materials.
+		// Material on ONLY the new frame's view plane contains:
+		//    BCRMap "$rendertarget"
 		m_wRTTexture.SetRenderTarget(GetOwner());
 
 		m_bInitialized = true;
-		if (m_bDebug)
-			PrintFormat("[CGS PORTAL PIP] LIVE test feed bound: color=%1 camera=%2 partner=%3 fps=%4 scale=%5", m_pPortal.GetPortalID(), m_iCameraIndex, m_pPartner.GetPortalID(), fps, scale);
 
+		if (m_bDebug)
+		{
+			vector lens[4];
+			m_pFeedCamera.GetTransform(lens);
+			PrintFormat("[CGS PORTAL PIP CAMERA] ScriptCamera CREATED slot=%1 origin=%2 forward=%3", m_iCameraIndex, lens[3], lens[2]);
+			PrintFormat("[CGS PORTAL PIP] LIVE test feed bound: color=%1 camera=%2 partner=%3 fps=%4 scale=%5", m_pPortal.GetPortalID(), m_iCameraIndex, m_pPartner.GetPortalID(), fps, scale);
+			Print("[CGS PORTAL PIP MATERIAL] If view remains blank, check *_ViewPlane material resolves to CGS_Portal_PIP_Screen_TEST.emat (BCRMap $rendertarget); reimport frame .xob.");
+		}
 		return true;
+	}
+
+	//------------------------------------------------------------------------------------------------
+	// This delay also follows the old CCTV monitor's behavior: wait until
+	// the player's world renderer and workspace are fully initialized.
+	protected void StartPreviewDelayed()
+	{
+		m_bStartScheduled = false;
+		if (m_bPreviewEnabled && m_pPartner && !m_bInitialized)
+			SetupPreview();
 	}
 
 	//------------------------------------------------------------------------------------------------
 	protected void DestroyPreview()
 	{
+		// Unbind first. Removing a render target after its material or
+		// owner has gone away can crash the engine's render thread.
 		if (m_wRTTexture && GetOwner() && !GetOwner().IsDeleted())
 			m_wRTTexture.RemoveRenderTarget(GetOwner());
 
@@ -198,7 +251,16 @@ class CGS_PortalPIPTestComponent : ScriptComponent
 		m_wUIRoot = null;
 		m_wRTTexture = null;
 		m_wView = null;
+
+		if (m_pFeedCamera)
+		{
+			delete m_pFeedCamera;
+			m_pFeedCamera = null;
+		}
+
 		m_bInitialized = false;
+		m_bPrintedCameraReadback = false;
+		m_fDiagnosticClock = 0;
 	}
 
 	//------------------------------------------------------------------------------------------------
@@ -226,6 +288,11 @@ class CGS_PortalPIPTestComponent : ScriptComponent
 			outset = 1;
 		cam[3] = m_pPartner.GetOwner().GetOrigin() + normal * outset;
 
+		if (m_pFeedCamera)
+		{
+			m_pFeedCamera.SetTransform(cam);
+			m_pFeedCamera.FreeFly = false;
+		}
 		GetOwner().GetWorld().SetCameraEx(m_iCameraIndex, cam);
 	}
 
@@ -244,6 +311,8 @@ class CGS_PortalPIPTestComponent : ScriptComponent
 				m_bLoggedNoPartner = true;
 			}
 
+			// If a partner is temporarily missing (GM edit/streaming),
+			// tear down only once instead of rebuilding every frame.
 			if (m_bInitialized)
 				DestroyPreview();
 
@@ -254,17 +323,44 @@ class CGS_PortalPIPTestComponent : ScriptComponent
 		m_bLoggedNoPartner = false;
 		m_pPartner = opposite;
 
-		// Set the camera position BEFORE target setup so the first
-		// allocated render isn't from world origin.
-		UpdatePartnerCamera();
+		// Follow the partner transform even if the remote portal moves.
+		// This also keeps ScriptCamera.FreeFly disabled every frame.
+		if (m_bInitialized)
+		{
+			UpdatePartnerCamera();
 
-		if (!m_bInitialized)
-			SetupPreview();
+			// One-time readback: the old "feed bound" message only
+			// established the widget binding, NOT the camera view.
+			m_fDiagnosticClock += timeSlice;
+			if (!m_bPrintedCameraReadback && m_fDiagnosticClock >= 1.0)
+			{
+				m_bPrintedCameraReadback = true;
+				if (m_bDebug)
+				{
+					vector actual[4];
+					owner.GetWorld().GetCamera(m_iCameraIndex, actual);
+					PrintFormat("[CGS PORTAL PIP CAMERA] World camera READBACK slot=%1 origin=%2 forward=%3", m_iCameraIndex, actual[3], actual[2]);
+				}
+			}
+			return;
+		}
+
+		// Avoid setting up the second rendering pipeline on the very
+		// first game frame. The supplied CCTV mod delays its render
+		// target creation for the same reason (renderer readiness).
+		if (!m_bStartScheduled)
+		{
+			m_bStartScheduled = true;
+			GetGame().GetCallqueue().CallLater(StartPreviewDelayed, 2200, false);
+		}
 	}
 
 	//------------------------------------------------------------------------------------------------
 	override void OnDelete(IEntity owner)
 	{
+		if (GetGame() && GetGame().GetCallqueue())
+			GetGame().GetCallqueue().Remove(StartPreviewDelayed);
+
 		DestroyPreview();
 		s_aTests.RemoveItem(this);
 		super.OnDelete(owner);
