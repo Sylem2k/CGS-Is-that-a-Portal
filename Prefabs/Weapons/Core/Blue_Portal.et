@@ -7,6 +7,10 @@ GenericEntity {
    m_fExitOffset 1.5
    m_fActivationDistance 1
    m_bDebug 1
+   m_bUsePlaneCrossing 1
+   m_fHalfWidth 1
+   m_fHalfHeight 1.5
+   m_fCrossingStep 0.6
   }
   RplComponent "{6AB20E69D31FBED5}" {
    "Rpl State Override" Runtime
