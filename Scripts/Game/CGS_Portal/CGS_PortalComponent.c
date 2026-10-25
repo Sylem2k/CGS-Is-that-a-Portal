@@ -10,6 +10,11 @@ class CGS_PortalComponent : ScriptComponent
 
 	// 0 = manually placed legacy test portal; >0 = owner player's ID.
 	// Runtime-spawned gun portals get assigned immediately after spawn.
+	//
+	// PIP needs to pair each owner's Blue and Orange portals LOCALLY
+	// on every client. Server-only static manager maps do not replicate.
+	// This single RplProp keeps per-player render pairing unambiguous in MP.
+	[RplProp()]
 	[Attribute("0", UIWidgets.EditBox, "Portal owner player ID. 0 = shared test portal")]
 	protected int m_iPortalOwnerID;
 
@@ -146,6 +151,9 @@ class CGS_PortalComponent : ScriptComponent
 
 		CGS_PortalManagerComponent.UnregisterPortal(this);
 		m_iPortalOwnerID = ownerPlayerId;
+		// Ensure already-replicated proxies receive the updated owner ID
+		// after the server assigns it immediately after spawning.
+		Replication.BumpMe();
 		CGS_PortalManagerComponent.RegisterPortal(this);
 		if (m_bDebug)
 			PrintFormat("[CGS PORTAL OWNER] Portal color=%1 registered to player=%2", m_iPortalID, m_iPortalOwnerID);

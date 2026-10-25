@@ -1,2 +1,10 @@
+// CGS ORANGE Portal - emissive frame ring. Kept separate from
+// the ViewPlane's $rendertarget material and the frame metal.
 MatPBRBasic {
+ Color 1 0.36 0.03 1
+ Emissive 1 0.25 0.01 1
+ EmissiveLV 4
+ CastShadow 0
+ MetalnessScale 0
+ RoughnessScale 0.28
 }

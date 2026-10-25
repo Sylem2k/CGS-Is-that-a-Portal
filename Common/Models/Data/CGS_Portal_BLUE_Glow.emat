@@ -1,2 +1,10 @@
+// CGS BLUE Portal - emissive frame ring. Kept separate from
+// the ViewPlane's $rendertarget material and the frame metal.
 MatPBRBasic {
+ Color 0.05 0.36 1 1
+ Emissive 0.04 0.40 1 1
+ EmissiveLV 4
+ CastShadow 0
+ MetalnessScale 0
+ RoughnessScale 0.28
 }

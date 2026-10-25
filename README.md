@@ -721,3 +721,38 @@ My portal camera did not previously do that. It had its own exposure which might
 5. Leave Orange's camera disabled until one-way Blue has correct exposure. No recursion protection, viewer-relative parallax, or multiplayer personal portal pairing has been added.
 
 **Status:** Script changes are pushed, but they still require Workbench compilation and a brightness screenshot.
+
+
+## Phase 2.4 — Both live portal views integrated into the gun (first-person notes)
+
+I confirmed that the Blue portal's center finally displays a genuine moving scene from Orange's location. My latest image shows the remote building and trees inside the oval. The PiP HDR exposure fix also helps: my log showed player-camera exposure around 0.00495584 and matched portal-camera exposure around 0.00495585 after the first frame. The other important fixes were the original XOB material slot name, the runtime screen-only `$remap`, and a MatPBRBasic screen material that samples `$rendertarget` for both BCR and emission.
+
+I am now applying the same setup to Orange **and** to the real portals created by my gun. This phase is code-complete on the GitHub branch but is not yet compiled or multiplayer-tested in Workbench.
+
+### What I changed
+
+- `Prefabs/Weapons/Core/Blue_Portal.et` now uses my imported `Blue_Portal_Frame.xob`; `Orange_Portal.et` uses `Orange_Portal_Frame.xob`. Their existing `CGS_PortalComponent`, `RplComponent`, traversal data, crossing ranges, momentum, and original prefab/resource GUIDs are unchanged. The gun still spawns exactly these original prefab resource paths and still uses **LMB = Blue**, **MMB = Orange**, and **RMB = ADS**.
+- I added `CGS_PortalPIPLiveComponent` to each real gun portal. It creates a **client-local**, fixed-direction remote `ScriptCamera`, uses the existing `RTTexture0` / `RenderTarget0` layout, forces the imported ViewPlane's screen material with `SetObject("$remap ...")`, and connects the live camera view directly to the frame's center plane. The metal frame and colored glow-ring materials are left separate.
+- Blue looks outward from its matching Orange portal. Orange looks outward from its matching Blue portal. Both views use actual exit-facing normals, including wall, floor, ceiling, and sloped placements. There is no old horizontal camera override in the production gun component.
+- Every client pairs personal portals using the **replicated** `m_iPortalOwnerID` in `CGS_PortalComponent` (new `[RplProp()]` plus a server `Replication.BumpMe()` when assigned). I cannot use the server's static portal manager map for client-side camera pairing because that map does not replicate. World/test portals with owner ID 0 do not match a gun portal.
+- I matched the portal camera's HDR exposure to the local player's camera on each frame using the official PIP scope approach. Default multiplier is 1.0, with a component property to adjust brightness as needed.
+- To avoid rendering every player's portal camera at the same time, each CLIENT renders at most the **two closest eligible portal faces within 120 meters**, on camera slots 26 and 27. Each feed defaults to **12 FPS, half render scale**. As I walk to another portal, my client releases old render targets before reusing its slots. The server does not stream camera images or create UI widgets on a dedicated server.
+- `Orange_Portal_PIP_Test.et` also has its live PiP feed and HDR matching enabled now, so I can first verify both directions with the simple static test frames (Blue test stays enabled). Both static PiP test prefabs continue to have teleportation disabled.
+- I gave my previously unconfigured Blue and Orange glow ring .emat materials their own matching emissive colors rather than plain white. The ViewPlane keeps the proven high-brightness material, unchanged.
+- I did **not** change the gun's shoot validation, surface trace/raycast, automatic portal transform, per-player replacement logic, teleport method, momentum, or the already successful anti-reentry fix.
+
+### My testing order in Workbench
+
+1. **Compile first.** If Game scripts fail, send the first compiler error for `CGS_PortalPIPLiveComponent.c` or the new `[RplProp()]` in `CGS_PortalComponent.c`.
+2. **Static two-way preview:** Place one `Blue_Portal_PIP_Test.et` and one `Orange_Portal_PIP_Test.et` in the same world. Both are now enabled at 12 FPS and half resolution. View Blue and Orange from different positions and confirm that each displays the remote scene, not its own scene. Test separately from other active gun pairs at first.
+3. **Gun integration:** Equip the regular CGS portal gun. Fire LMB Blue into a valid static wall, then MMB Orange at a second wall. The spawned portals should use the new colored 3 m × 4 m frames, with a live center on both. Move between them to confirm the corresponding remote view updates as a character moves in front of the opposite portal.
+4. **Teleport safety:** Walk through Blue and back through Orange. Check that the player teleports once with no endless bounce, and that moving/replacing either portal with another shot still clears and rebinds its associated client view.
+5. **Orientation:** Fire a Blue wall portal and an Orange floor/ceiling portal. The image should follow the true remote portal normal rather than the test camera's horizontal override.
+6. **Multiplayer:** With two clients, each owning a different Blue/Orange pair, confirm that neither player's camera renders from another owner's exit, and that the server remains authoritative for teleporting. Watch for `[CGS GUN PIP] LIVE owner=... color=... remoteColor=... slot=...` in the local client log if `m_bDebug` is enabled.
+7. **Load / recursion:** Put both portals facing one another and watch for visual feedback, high GPU time, or recursive image artifacts. Proper portal clipping, viewer-relative parallax and recursive portal masking are not yet implemented.
+
+### Important limitations
+
+The first production preview is **a live remote camera image on a flat plane**, not yet a true per-eye geometric portal. I haven't implemented perspective parallax based on viewer position or clipping of objects between the exit camera and the exit plane. Opposing cameras may capture each other's screen and produce visual feedback. Each local player is capped at two simultaneous live screens for performance; more distant personal portals remain present and teleportable but may show only their inactive screen material until selected for rendering. Slots 26 and 27 are reserved for this local test and could conflict with other mods that use those particular camera indexes. A custom camera-slot allocator and per-client load policy will be needed for production on large modded servers.
+
+**Status:** unverified in Workbench for both-way runtime gun integration; the older one-way Blue test and HDR fix have been user-tested and remain our fallback baseline.
