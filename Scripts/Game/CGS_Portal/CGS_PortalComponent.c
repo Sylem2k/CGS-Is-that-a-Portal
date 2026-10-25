@@ -11,7 +11,7 @@ class CGS_PortalComponent : ScriptComponent
 	[Attribute("1", UIWidgets.CheckBox, "Enable this portal")]
 	protected bool m_bEnabled;
 
-	[Attribute("1.5", UIWidgets.EditBox, "Exit offset in meters")]
+	[Attribute("2.5", UIWidgets.EditBox, "Exit offset in meters")]
 	protected float m_fExitOffset;
 
 	[Attribute("2.0", UIWidgets.EditBox, "Legacy proximity activation distance (meters)")]
@@ -32,8 +32,20 @@ class CGS_PortalComponent : ScriptComponent
 	[Attribute("1.0", UIWidgets.EditBox, "Front-side catch distance (meters); catches player before hitting solid floor/wall")]
 	protected float m_fFrontCatchDistance;
 
-	[Attribute("2.0", UIWidgets.EditBox, "Maximum crossing step distance in meters")]
+	[Attribute("6.0", UIWidgets.EditBox, "Maximum crossing step distance in meters")]
 	protected float m_fCrossingStep;
+
+
+	[Attribute("1", UIWidgets.CheckBox, "EXPERIMENT: attempt to preserve player momentum through portal")]
+	protected bool m_bPreserveMomentum;
+
+	[Attribute("1.0", UIWidgets.EditBox, "EXPERIMENT: exit velocity multiplier")]
+	protected float m_fMomentumMultiplier;
+
+	[Attribute("45", UIWidgets.EditBox, "EXPERIMENT: max exit speed in m/s; 0 means uncapped")]
+	protected float m_fMaxExitSpeed;
+
+	protected int m_iSuccessfulTransfers;
 
 	protected ref map<IEntity, vector> m_mPreviousPositions = new map<IEntity, vector>();
 
@@ -55,7 +67,11 @@ class CGS_PortalComponent : ScriptComponent
 
 		CGS_PortalManagerComponent.RegisterPortal(this);
 		if (m_bDebug)
-			PrintFormat("[CGS PORTAL] Registered portal ID=%1 at %2", m_iPortalID, owner.GetOrigin());
+			{
+			vector initTransform[4];
+			owner.GetWorldTransform(initTransform);
+			PrintFormat("[CGS PORTAL] Registered ID=%1 position=%2 outward normal=%3", m_iPortalID, initTransform[3], initTransform[2]);
+		}
 	}
 
 	override void EOnFrame(IEntity owner, float timeSlice)
@@ -133,8 +149,12 @@ class CGS_PortalComponent : ScriptComponent
 			if (!shouldTransfer)
 				continue;
 
-			if (CGS_PortalTransferComponent.TryTransfer(character, partner) && m_bDebug)
-				PrintFormat("[CGS PORTAL] Transfer requested: player=%1 from portal=%2 to portal=%3", playerId, m_iPortalID, partner.GetPortalID());
+			if (CGS_PortalTransferComponent.TryTransfer(character, this, partner))
+			{
+				m_iSuccessfulTransfers++;
+				if (m_bDebug && (m_iSuccessfulTransfers <= 3 || m_iSuccessfulTransfers % 10 == 0))
+					PrintFormat("[CGS PORTAL] Transfer #%1 player=%2 portal %3 to %4", m_iSuccessfulTransfers, playerId, m_iPortalID, partner.GetPortalID());
+			}
 		}
 	}
 
@@ -151,5 +171,25 @@ class CGS_PortalComponent : ScriptComponent
 	float GetExitOffset()
 	{
 		return m_fExitOffset;
+	}
+
+	float GetFrontCatchDistance()
+	{
+		return m_fFrontCatchDistance;
+	}
+
+	bool ShouldPreserveMomentum()
+	{
+		return m_bPreserveMomentum;
+	}
+
+	float GetMomentumMultiplier()
+	{
+		return m_fMomentumMultiplier;
+	}
+
+	float GetMaxExitSpeed()
+	{
+		return m_fMaxExitSpeed;
 	}
 }
