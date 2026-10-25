@@ -18,6 +18,10 @@ GenericEntity {
   }
   Hierarchy "{6AB20E69D31FBED7}" {
   }
+  MeshObject "{6AB21D04ECC6E03E}" {
+   Object "{654C96CCE67E3142}Common/Models/Portal_Test_Blue.xob"
+  }
  }
  Flags 0x400003 0
+ coords 121.204 1.944 76.183
 }

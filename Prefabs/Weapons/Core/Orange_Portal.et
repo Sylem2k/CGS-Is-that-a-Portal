@@ -18,6 +18,10 @@ GenericEntity {
   }
   Hierarchy "{6AB20E69F5EA96A8}" {
   }
+  MeshObject "{6AB21D04F1669F63}" {
+   Object "{654C96CCE67E3143}Common/Models/Portal_Test_Orange.xob"
+  }
  }
  Flags 0x400003 0
+ coords 117.827 1.868 76.512
 }
