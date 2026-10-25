@@ -218,6 +218,11 @@ class CGS_PortalPIPTestComponent : ScriptComponent
 			vector lens[4];
 			m_pFeedCamera.GetTransform(lens);
 			PrintFormat("[CGS PORTAL PIP CAMERA] ScriptCamera CREATED slot=%1 origin=%2 forward=%3", m_iCameraIndex, lens[3], lens[2]);
+
+			vector remoteForward = lens[2];
+			if (Math.AbsFloat(remoteForward[1]) >= 0.85)
+				Print("[CGS PORTAL PIP CAMERA] NOTE: Remote test portal faces nearly vertical. Camera sees mostly SKY or GROUND. Rotate both test frame prefabs upright to see scenery.");
+
 			PrintFormat("[CGS PORTAL PIP] LIVE test feed bound: color=%1 camera=%2 partner=%3 fps=%4 scale=%5", m_pPortal.GetPortalID(), m_iCameraIndex, m_pPartner.GetPortalID(), fps, scale);
 			Print("[CGS PORTAL PIP MATERIAL] If view remains blank, check *_ViewPlane material resolves to CGS_Portal_PIP_Screen_TEST.emat (BCRMap $rendertarget); reimport frame .xob.");
 		}
