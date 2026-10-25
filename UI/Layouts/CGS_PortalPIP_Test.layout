@@ -2,7 +2,7 @@
 // Based on the same RTTextureWidget/RenderTargetWidget hierarchy as
 // Reforger's PIP optics and the supplied old CCTV monitor.
 //
-// The inner RenderTarget0 renders camera N. The outer RTTexture0 exposes
+// IMPORTANT: With Anchor 0 0 1 1 the child must use SizeX/Y 0, NOT\n// negative parent dimensions. Negative -512 collapsed the render region.\n// The inner RenderTarget0 renders camera N. The outer RTTexture0 exposes
 // this image to mesh materials using BCRMap "$rendertarget".
 FrameWidgetClass {
  Name "rootFrame"
@@ -26,9 +26,9 @@ FrameWidgetClass {
       OffsetLeft 0
       PositionY 0
       OffsetTop 0
-      SizeX -512
+      SizeX 0
       OffsetRight 0
-      SizeY -512
+      SizeY 0
       OffsetBottom 0
      }
     }
