@@ -1,0 +1,8 @@
+GameProject {
+ ID "CGSIsthataPortal"
+ GUID "6AB20D07741355DF"
+ TITLE "CGS Is that a Portal"
+ Dependencies {
+  "58D0FB3206B6F859"
+ }
+}
