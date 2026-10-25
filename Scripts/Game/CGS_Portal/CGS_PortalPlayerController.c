@@ -143,10 +143,10 @@ modded class SCR_PlayerController
 		RpcDo_CGSPinkTarget(characterID);
 	}
 
-	// PINKIFIER - TEST VISUAL IDENTITY HEAD SWAP + BODY TINT.
-	// Uses the character identity system for a vanilla camouflage head.
-	// Never calls SetMaterial on a head or any attached equipment.
-	// The head will be CAMOUFLAGE, not pink, for this first safety test.
+	// PINKIFIER - TEST IDENTITY-MANAGED PINK HEAD VARIANT.
+	// White_04 receives an inherited, prefab-defined PINK head.
+	// Other known head models remain vanilla camo as a control group.
+	// Never calls SetMaterial on a head or attached equipment.
 	[RplRpc(RplChannel.Reliable, RplRcver.Broadcast)]
 	protected void RpcDo_CGSPinkTarget(RplId characterID)
 	{
@@ -213,7 +213,7 @@ modded class SCR_PlayerController
 		}
 
 		// Avoid repeated swap on subsequent shots.
-		if (currentHead.Contains("_camo_"))
+		if (currentHead.Contains("_camo_") || currentHead.Contains("CGS_Head_White_04_Pink"))
 		{
 			PrintFormat("[CGS PINKIFIER IDENTITY TEST] Existing camo head already assigned=%1", currentHead);
 			return;
@@ -232,8 +232,8 @@ modded class SCR_PlayerController
 		PrintFormat("[CGS PINKIFIER IDENTITY TEST] Head changed through VisualIdentity: old=%1 new=%2", currentHead, newHead);
 	}
 
-	// Vanilla identity-managed camouflage resources. No custom head
-	// prefabs are needed for this proof of correct skeletal attachment.
+	// White_04 uses a CGS prefab with pink material assignments.
+	// All other head types retain their known-good vanilla camo tests.
 	protected ResourceName CGS_GetVanillaTestCamo(ResourceName currentHead)
 	{
 		if (currentHead.Contains("Head_Asian_02"))
@@ -249,7 +249,7 @@ modded class SCR_PlayerController
 			return "{51636CA07EC51127}Prefabs/Characters/Heads/Head_White_03/Head_White_03_camo_US_01.et";
 
 		if (currentHead.Contains("Head_White_04"))
-			return "{473E20387338226D}Prefabs/Characters/Heads/Head_White_04/Head_White_04_camo_US_01.et";
+			return "{6AB2F1A000000420}Prefabs/Characters/Heads/CGS_Head_White_04_Pink.et";
 
 		if (currentHead.Contains("Head_White_05"))
 			return "{36B119F39289239E}Prefabs/Characters/Heads/Head_White_05/Head_White_05_camo_US_01.et";
