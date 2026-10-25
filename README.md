@@ -557,3 +557,31 @@ Based on the actual Reforger vanilla \`SCR_PIPSightsComponent.c\`:
 5. If it shows black or a static color, send the PIP logs, screenshot of **screen material** in Resource Manager, and any Layout warnings. Do not overwrite the stable prefab with this test.
 6. Only after the single live feed succeeds should the Orange feed be enabled and tested for recursion / cost.
 
+
+## Phase 2.3a — Fix blank PIP screen (ScriptCamera + dedicated layout)
+
+**Observed:** `[CGS PORTAL PIP] LIVE test feed bound` appeared in the Workbench log while the portal screen showed no image. That message proves widget/mesh binding was attempted, not that a world camera was rendering.
+
+**Root-cause hypothesis:** The original prototype used `BaseWorld.SetCameraEx` without a `ScriptCamera` entity. Both vanilla Reforger PIP optics and the user-supplied old SVC CCTV mod create an actual camera entity and configure its camera slot before connecting the rendering widgets.
+
+Changes in `fix/portal-pip-live-camera`: 
+- Create and configure a local `ScriptCamera` for the remote portal camera slot, and follow the partner transform every frame with `FreeFly` disabled.
+- Apply slot FOV, near/far planes, perspective camera type, and lens-flare settings, as in the old CCTV implementation.
+- Defer camera/layout initialization for 2.2 seconds to allow the game renderer and UI workspace to initialize.
+- Provide our own 512x512 `UI/Layouts/CGS_PortalPIP_Test.layout` containing `RTTexture0` and `RenderTarget0`, instead of using the rifle-scope layout.
+- Preserve the current portal test prefabs, frame meshes, glow materials, PIP `$rendertarget` material, normal gameplay portals, gun controls, and teleport scripts.
+- Add one-time debug logs confirming the real camera entity exists and showing world camera matrix readback.
+- Log a warning if the Orange test frame points mostly up/down. Neutral test prefab orientation can cause the remote camera to look only at sky/ground.
+
+### Validate in Workbench
+1. Pull this branch and compile Game scripts. This is still an untested change.
+2. Place one `Blue_Portal_PIP_Test.et` and one `Orange_Portal_PIP_Test.et` manually in the editor. Rotate both test frames upright. Aim Orange toward a tree/building/vehicle.
+3. Enter Play and look at Blue's plane. The Orange feed is intentionally OFF until Blue is confirmed.
+4. Expected diagnostics:
+   `[CGS PORTAL PIP CAMERA] ScriptCamera CREATED slot=20 origin=... forward=...`
+   `[CGS PORTAL PIP] LIVE test feed bound: color=0 camera=20 partner=1 fps=12 scale=0.5`
+   `[CGS PORTAL PIP CAMERA] World camera READBACK slot=20 origin=... forward=...`
+5. If all camera messages appear but the plane stays blank, check `Blue_Portal_Frame.xob` material assignment: `CGS_Portal_BLUE_Screen_PLACEHOLDER` should map to `CGS_Portal_PIP_Screen_TEST.emat` containing `BCRMap "$rendertarget"`. Force reimport the XOB after checking it.
+6. If the camera forward vector is nearly vertical, rotate the Orange test frame upright to get a scene instead of sky/ground.
+
+Do not turn on the Orange feed yet. Two-way recursive rendering, viewer-relative parallax, full multiplayer pairing, and clipping are future phases.
