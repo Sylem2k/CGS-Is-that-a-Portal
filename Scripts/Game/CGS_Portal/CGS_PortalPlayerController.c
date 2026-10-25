@@ -143,11 +143,10 @@ modded class SCR_PlayerController
 		RpcDo_CGSPinkTarget(characterID);
 	}
 
-	// PINKIFIER - SKIN/BODY ONLY, HEAD ATTACHMENT SAFETY.
-	// Previous Workbench tests showed that changing a live head mesh
-	// detached its rendering from the original skeletal attachment.
-	// Apply only to the root character mesh, never to child head,
-	// helmet, uniform, equipment, or weapon entities.
+	// PINKIFIER - TEST VISUAL IDENTITY HEAD SWAP + BODY TINT.
+	// Uses the character identity system for a vanilla camouflage head.
+	// Never calls SetMaterial on a head or any attached equipment.
+	// The head will be CAMOUFLAGE, not pink, for this first safety test.
 	[RplRpc(RplChannel.Reliable, RplRcver.Broadcast)]
 	protected void RpcDo_CGSPinkTarget(RplId characterID)
 	{
@@ -176,11 +175,98 @@ modded class SCR_PlayerController
 			return;
 		}
 
-		// Previously observed to tint exposed root-body skin without
-		// the headgear detachment / T-pose seen on attached child meshes.
-		// No recursive remap and no attached-entity SetMaterial calls.
+		// Only the authoritative server changes VisualIdentity. This
+		// experiment follows existing Reforger facepaint implementations.
+		// It never remaps the live head mesh.
+		if (Replication.IsServer())
+			CGS_TrySetVanillaCamoHead(character);
+
+		// Preserve the already-tested non-recursive root body skin tint.
 		SCR_Global.SetMaterial(character, pinkMaterial, false);
-		PrintFormat("[CGS PINKIFIER BODY-ONLY] Target=%1 bodyPainted=1 headPainted=0 equipmentPainted=0", character);
+		PrintFormat("[CGS PINKIFIER IDENTITY TEST] Target=%1 bodyPink=1 attachedMeshRemaps=0", character);
+	}
+
+	// Identity test: replace the assigned head prefab through the
+	// supported identity component, NOT by replacing a VObject.
+	// Head camouflage is deliberately used as a compatibility test.
+	protected void CGS_TrySetVanillaCamoHead(ChimeraCharacter character)
+	{
+		SCR_CharacterIdentityComponent identityComponent = SCR_CharacterIdentityComponent.Cast(character.FindComponent(SCR_CharacterIdentityComponent));
+		if (!identityComponent || !identityComponent.GetIdentity())
+		{
+			Print("[CGS PINKIFIER IDENTITY TEST] Character has no usable identity component.", LogLevel.WARNING);
+			return;
+		}
+
+		VisualIdentity visualIdentity = identityComponent.GetIdentity().GetVisualIdentity();
+		if (!visualIdentity)
+		{
+			Print("[CGS PINKIFIER IDENTITY TEST] Character has no visual identity.", LogLevel.WARNING);
+			return;
+		}
+
+		ResourceName currentHead = visualIdentity.GetHead();
+		if (!currentHead)
+		{
+			Print("[CGS PINKIFIER IDENTITY TEST] Current head prefab is empty.", LogLevel.WARNING);
+			return;
+		}
+
+		// Avoid repeated swap on subsequent shots.
+		if (currentHead.Contains("_camo_"))
+		{
+			PrintFormat("[CGS PINKIFIER IDENTITY TEST] Existing camo head already assigned=%1", currentHead);
+			return;
+		}
+
+		ResourceName newHead = CGS_GetVanillaTestCamo(currentHead);
+		if (!newHead)
+		{
+			PrintFormat("[CGS PINKIFIER IDENTITY TEST] No vanilla camo mapping for head=%1", currentHead);
+			return;
+		}
+
+		visualIdentity.SetHead(newHead);
+		identityComponent.CommitChanges();
+		identityComponent.SetIdentity(identityComponent.GetIdentity());
+		PrintFormat("[CGS PINKIFIER IDENTITY TEST] Head changed through VisualIdentity: old=%1 new=%2", currentHead, newHead);
+	}
+
+	// Vanilla identity-managed camouflage resources. No custom head
+	// prefabs are needed for this proof of correct skeletal attachment.
+	protected ResourceName CGS_GetVanillaTestCamo(ResourceName currentHead)
+	{
+		if (currentHead.Contains("Head_Asian_02"))
+			return "{FF94E9F1DAB8496C}Prefabs/Characters/Heads/Head_Asian_02/Head_Asian_02_camo_US_01.et";
+
+		if (currentHead.Contains("Head_Black_02"))
+			return "{33850F6F8AC1FC61}Prefabs/Characters/Heads/Head_Black_02/Head_Black_02_camo_US_01.et";
+
+		if (currentHead.Contains("Head_White_02"))
+			return "{43AA5BDFE4338F57}Prefabs/Characters/Heads/Head_White_02/Head_White_02_camo_US_01.et";
+
+		if (currentHead.Contains("Head_White_03"))
+			return "{51636CA07EC51127}Prefabs/Characters/Heads/Head_White_03/Head_White_03_camo_US_01.et";
+
+		if (currentHead.Contains("Head_White_04"))
+			return "{473E20387338226D}Prefabs/Characters/Heads/Head_White_04/Head_White_04_camo_US_01.et";
+
+		if (currentHead.Contains("Head_White_05"))
+			return "{36B119F39289239E}Prefabs/Characters/Heads/Head_White_05/Head_White_05_camo_US_01.et";
+
+		if (currentHead.Contains("Head_White_06"))
+			return "{A42053AFB05A218B}Prefabs/Characters/Heads/Head_White_06/Head_White_06_camo_US_01.et";
+
+		if (currentHead.Contains("Head_White_08"))
+			return "{889ACA9FABA0471F}Prefabs/Characters/Heads/Head_White_08/Head_White_08_camo_US_01.et";
+
+		if (currentHead.Contains("Head_White_09"))
+			return "{F915F3544A1146EC}Prefabs/Characters/Heads/Head_White_09/Head_White_09_camo_US_01.et";
+
+		if (currentHead.Contains("Head_White_10"))
+			return "{7E7987E31FB379BF}Prefabs/Characters/Heads/Head_White_10/Head_White_10_camo_US_01.et";
+
+		return "";
 	}
 
 	// PORTAL GUN - original weapon identification.
