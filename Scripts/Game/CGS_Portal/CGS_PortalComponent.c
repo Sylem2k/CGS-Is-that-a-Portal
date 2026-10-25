@@ -14,7 +14,7 @@ class CGS_PortalComponent : ScriptComponent
 	[Attribute("1.5", UIWidgets.EditBox, "Exit offset in meters")]
 	protected float m_fExitOffset;
 
-	[Attribute("1.0", UIWidgets.EditBox, "Legacy proximity activation distance (meters)")]
+	[Attribute("2.0", UIWidgets.EditBox, "Legacy proximity activation distance (meters)")]
 	protected float m_fActivationDistance;
 
 	[Attribute("1", UIWidgets.CheckBox, "Print portal diagnostic messages to server log")]
@@ -23,13 +23,13 @@ class CGS_PortalComponent : ScriptComponent
 	[Attribute("1", UIWidgets.CheckBox, "Use portal plane crossing; disable for legacy proximity mode")]
 	protected bool m_bUsePlaneCrossing;
 
-	[Attribute("1.0", UIWidgets.EditBox, "Portal half-width in meters")]
+	[Attribute("1.5", UIWidgets.EditBox, "Portal half-width in meters")]
 	protected float m_fHalfWidth;
 
-	[Attribute("1.5", UIWidgets.EditBox, "Portal half-height in meters")]
+	[Attribute("2.0", UIWidgets.EditBox, "Portal half-height in meters")]
 	protected float m_fHalfHeight;
 
-	[Attribute("0.6", UIWidgets.EditBox, "Maximum crossing step distance in meters")]
+	[Attribute("2.0", UIWidgets.EditBox, "Maximum crossing step distance in meters")]
 	protected float m_fCrossingStep;
 
 	protected ref map<IEntity, vector> m_mPreviousPositions = new map<IEntity, vector>();
