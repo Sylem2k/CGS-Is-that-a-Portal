@@ -2,8 +2,9 @@
 // CGS Portal Gun - independent primary and secondary input bridge.
 //
 // LEFT MOUSE -> Blue: keep Reforger CharacterFire, confirmed working.
-// RIGHT MOUSE -> Orange: separate CGSPortalGunOrange action.
-//   Configs/System/chimeraInputCommon.conf binds mouse:button1.
+// MIDDLE MOUSE -> Orange: separate CGSPortalGunOrange action.
+//   Configs/System/chimeraInputCommon.conf binds mouse:button2.
+//   Right mouse remains normal ADS.
 //   CGSPortalGunContext is activated only while the portal gun is held.
 //
 // Uses one click -> one server-authoritative portal placement. The server
@@ -41,9 +42,9 @@ modded class SCR_PlayerController
 			return;
 		}
 
-		// This takes mouse:button1 away from vanilla ADS and maps it to
-		// our own Orange action. Re-activate every update while equipped:
-		// contexts are frame-lived in the Enfusion input manager.
+		// Custom Orange uses middle mouse. Vanilla ADS stays on RMB.
+		// Re-activate every update while this gun is equipped because
+		// input contexts are frame-lived in Enfusion.
 		bool activated = inputManager.ActivateContext("CGSPortalGunContext");
 
 		if (!m_bCGSInputContextReported)
@@ -62,7 +63,7 @@ modded class SCR_PlayerController
 			m_bCGSInputContextReported = true;
 		}
 
-		// Read the dedicated action, never CharacterWeaponADS here.
+		// Orange reads the dedicated middle-click action; vanilla ADS is not used.
 		bool secondaryHeld = inputManager.GetActionValue("CGSPortalGunOrange") > 0.5;
 
 		// Rising edge prevents placing portals each frame while held.

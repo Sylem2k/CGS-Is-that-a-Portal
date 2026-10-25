@@ -5,4 +5,21 @@ GameProject {
  Dependencies {
   "58D0FB3206B6F859"
  }
+ Configurations {
+  GameProjectConfig PC {
+   InputManagerSettings InputManagerSettings "{50A48858902D5F64}" {
+    Default "{6AB21D161F2E7525}Configs/System/chimeraInputCommon.conf"
+   }
+  }
+  GameProjectConfig XBOX_ONE {
+  }
+  GameProjectConfig XBOX_SERIES {
+  }
+  GameProjectConfig PS4 {
+  }
+  GameProjectConfig PS5 {
+  }
+  GameProjectConfig HEADLESS {
+  }
+ }
 }

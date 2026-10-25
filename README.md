@@ -437,3 +437,35 @@ This patch preserves the working Blue path: `GetActionValue("CharacterFire")` an
 If Orange still ADS, supply the registration/context line. If it reports `registered=0`, the input resource is not being merged and Workbench must import/reload the `.conf`; if it reports `registered=1` but never requests `color=1`, the context/action is not receiving RMB. If it requests `color=1` but no portal appears, check `[CGS GUN]` placement rejections.
 
 **Limitation:** This is the first attempt at a high-priority custom input context, not confirmed yet to suppress every version of vanilla ADS. No global ADS or input behavior is changed for other weapons.
+
+
+## Phase 2.1d — Orange middle mouse and missing input registration
+
+**Branch:** `feature/portal-orange-middle-input-load` — not Workbench-compiled or gameplay-verified.
+
+### User-observed diagnostic
+```
+[CGS GUN INPUT] Orange action registered=0 contextActivated=0
+[CGS GUN INPUT] Player=1 requested color=0
+[CGS GUN RPC] Server received player=1 color=0
+[CGS GUN] Player=1 fired color=0 ...
+```
+
+This proves the Blue path is firing reliably and the Orange action **does not exist in the loaded input manager**. A key swap alone would not fix the problem.
+
+### Actual changes
+
+1. `addon.gproj`: adds the Reforger `Configurations / GameProjectConfig PC / InputManagerSettings` block with `Default "{6AB21D161F2E7525}Configs/System/chimeraInputCommon.conf"`, using the existing `.conf.meta` resource GUID. The previous PR added a standalone `.conf` but did not configure the input manager to load it.
+2. `Configs/System/chimeraInputCommon.conf`: changes its root to `ActionManager : "{795184CF9AD764DB}Configs/System/chimeraInputCommon.conf"` so the mod config **inherits the original game's complete input set**. This avoids dropping vanilla input mappings when the project points its input manager at the new config.
+3. Remaps `CGSPortalGunOrange` to **middle mouse (mouse:button2)**; the gamepad left trigger is retained as an optional alternative. `CGSPortalGunContext` is activated only while our portal gun is equipped.
+4. Changes documentation-only comments in `CGS_PortalPlayerController.c`: LMB **Blue** stays exactly as previously working (`CharacterFire`); RMB remains default vanilla ADS; MMB **Orange** uses the dedicated `CGSPortalGunOrange` action.
+5. No changes to portal gun prefab, customized hand-fit, model, collision, weapon animations, raycast placement, player ownership map, portal teleportation, momentum, or existing Blue click handling.
+
+### Test plan
+- Pull branch, close and relaunch Workbench (game project input settings are loaded at startup), compile.
+- Equip `Portal_Gun_.et` and look for **`[CGS GUN INPUT] Orange action registered=1 contextActivated=1`**. If either remains zero, send fresh logs.
+- Left click a surface → Blue portal. Middle mouse click a different surface → Orange portal. Check `[CGS GUN INPUT] Player=1 requested color=1`, `[CGS GUN RPC] Server received player=1 color=1`, `[CGS GUN] Player=1 fired color=1`.
+- Right click should continue ADS; confirm middle-click does not activate unrelated actions. Shoot Orange twice and verify only Orange is replaced.
+- Confirm movement, menu inputs, other weapons, and multiplayer replication remain functional: this patch changes the **project's input default**, so the inherited vanilla input config must be validated.
+
+**Note:** Workbench can have extra addon dependencies with their own overrides to `chimeraInputCommon.conf`. Our config inherits the vanilla base and may need additional handling if another addon modifies the same resource, so test with the project's actual mod set.
