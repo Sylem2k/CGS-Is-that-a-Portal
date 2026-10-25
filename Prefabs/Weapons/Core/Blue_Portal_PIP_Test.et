@@ -1,4 +1,5 @@
 // PiP proof-of-concept only; does NOT replace stable Blue_Portal / Orange_Portal.
+// Stage B: direct world-camera feed verified on HUD; now feed Blue's mesh plane.
 // Disable ordinary travel while evaluating camera feeds, and keep frame/glow intact.
 GenericEntity {
  ID "6AB25DDA4F023000"
@@ -18,7 +19,7 @@ GenericEntity {
    m_fCameraFOV 75
    m_fCameraOutset 0.25
    m_bDebug 1
-   m_bDebugHUD 1
+   m_bDebugHUD 0
    m_bUseHorizontalTestView 1
   }
   MeshObject "{6AB25DDA4F023003}" {
