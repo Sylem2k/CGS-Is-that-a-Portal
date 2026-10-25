@@ -1,0 +1,9 @@
+// Pinkifier gun tint, applied per Pinkifier instance via $remap.
+// The normal CGS Portal Gun keeps its original Water_Gun material.
+MatPBRBasic {
+ Color 1 0.13 0.56 1
+ Emissive 0.24 0.012 0.12 1
+ EmissiveLV 1.5
+ RoughnessScale 0.4
+ MetalnessScale 0.2
+}

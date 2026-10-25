@@ -1,0 +1,13 @@
+// Pinkifier target shader: intentionally bright HOT PINK with no texture map.
+// Only local appearance changes through SCR_Global.SetMaterial.
+// Never modifies damage, clothing inventory, animations, hitboxes or health.
+MatPBRBasic {
+ Color 1 0.06 0.47 1
+ Emissive 0.65 0.018 0.27 1
+ EmissiveLV 1
+ CastShadow 1
+ ReceiveShadow 1
+ RoughnessScale 0.7
+ MetalnessScale 0
+ Cull none
+}
