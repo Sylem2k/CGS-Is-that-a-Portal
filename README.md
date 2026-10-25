@@ -666,3 +666,29 @@ I verified that **rendering a second view of the same world is technically possi
 6. Leave Orange feed off until the one-way Blue mesh feed works. Two-way recursive camera rendering, per-viewer perspective, and multi-client performance remain future phases.
 
 **Safety:** Both stage-A and stage-B tests use separate `*_PIP_Test.et` prefabs with teleport disabled. I made no change to the working gun, its normal portal prefabs, controls, placement or teleportation. All camera tests remain experimental until tested in Workbench.
+
+## Phase 2.3e — PiP Blue screen shader + runtime imported XOB screen-slot remap
+
+I tested PR #20: the camera still renders correctly and the scripts report that the mesh render-target binding happened, but I still cannot see the live view on Blue's white oval. The camera is correctly positioned ~0.25m in front of Orange's world coordinates `(2251.21,55.53,2879.14)`, the world-camera slot 20 has a valid direction, and both `RTTexture0` / `RenderTarget0` report a nonzero ~257px region. The independent direct-HUD render previously showed genuine live scenery. That narrows the unknown to the render-to-mesh path rather than the camera itself.
+
+### Material findings
+
+- The old `CGS_Portal_PIP_Screen_TEST.emat` was a copy of a weapon optic shader with `Emissive 1 1 1 0` and `EmissiveLV -3.429`. Although this shader works in other contexts, it might be inappropriate for our imported opaque screen plane.
+- The Reforger Radar Development Framework screen material uses both `BCRMap "$rendertarget"` and `EmissiveMap "$rendertarget"`; the public minimal render-to-mesh test in Cops-n-Robbers uses `Color 1 1 1 1`, `Emissive 1 1 1 1`, and `EmissiveLV 5` to make it visible. I combined these characteristics in the dedicated screen material and kept the metal/glow materials untouched.
+- The Radar Development Framework also documents an intermittent issue where `.xob.meta` material assignments leave a mesh using its original surface material, even though the assignment exists in the resource file. The workaround uses `entity.SetObject(vObject, "$remap 'source material name' 'new .emat resource';")`. That call is a documented Enfusion API, and stock `SCR_FlagComponent` uses it as well.
+
+### Changes
+
+1. In `Common/Models/Data/CGS_Portal_PIP_Screen_TEST.emat` I set opaque white base/emissive tints, a bright emission level, `BCRMap` and `EmissiveMap` pointing at `$rendertarget`.
+2. In `CGS_PortalPIPTestComponent.c` I added `ForceScreenRenderMaterial()`. It runs only in the experimental Stage B test prefab, loads the material asset, uses `GetOwner().GetVObject().GetMaterials(...)` to print the actual imported material names, remaps only screen/ViewPlane slots, and leaves the metal frame and blue/orange glow slots alone. The call happens before `RTTextureWidget.SetRenderTarget(GetOwner())`.
+3. If the expected source slot is absent from the returned materials, I also attempt the exact original imported name `CGS_Portal_BLUE_Screen_PLACEHOLDER` / `CGS_Portal_ORANGE_Screen_PLACEHOLDER` as a fallback and print a diagnostic.
+4. I did not touch the normal Blue/Orange gun portal prefabs, placement, input, teleportation, or the already working anti-loop protection.
+
+### My next Workbench validation
+
+1. Pull this branch, compile, and start Play with exactly one Blue and Orange PiP test prefab. I leave Orange's live feed disabled, with the Blue HUD debug view disabled so the screen receives the image.
+2. Look for `[CGS PORTAL PIP MATERIAL] Frame VObject reports N material slot(s)`, followed by `Source slot[i]='...'` and `Runtime XOB screen remap issued`.
+3. Inspect whether the Blue oval now shows the remote live scenery. If the frame is still white, copy the material slot diagnostics and the camera/mesh lines. Those will show whether the XOB actually contains the `...Screen_PLACEHOLDER` section.
+4. If the material loads and the correct source slot was successfully remapped but the oval still stays blank, I will test the same `RTTexture0` with a simple changing text payload before introducing a second camera or changing the working teleport system.
+
+**Status:** GitHub PR only; uncompiled in Workbench. Shader and material remap behavior still require in-game confirmation.

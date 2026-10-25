@@ -1,11 +1,29 @@
-// EXPERIMENTAL render-to-mesh material for the BLUE/ORANGE frame view planes.
-// Reforger PIP sights use the same $rendertarget binding.
-// The output is generated LOCALLY, not sent across the network.
+// CGS Portal - experimental live camera material for imported *_ViewPlane.
+//
+// The previous scope-style emat used a zero-alpha emission tint:
+//     Emissive 1 1 1 0
+//     EmissiveLV -3.429
+// That was correct for a different scope design, but the Blue portal's
+// raw imported white plane did not display the remote render.
+//
+// Adapted from known Reforger render-to-mesh materials in the
+// Radar Development Framework Computer_Screen_RT and RTTest_Surface:
+// Sample the same $rendertarget in both base color and emissive maps,
+// use an opaque white tint and positive emissive brightness.
+// ONLY the separate portal screen slot should use this material.
+// Do not assign it to the frame or glow ring.
 MatPBRBasic {
- Emissive 1 1 1 0
- EmissiveLV -3.429
+ Color 1 1 1 1
+ Emissive 1 1 1 1
+ EmissiveLV 5
  ApplyAlbedoToEmissive 1
+ CastShadow 0
+ OccludeRain 0
+ OccludeWetness 0
+ NoDecals 1
  Cull none
- Specular 0 0 0 1
+ RoughnessScale 0.2
+ MetalnessScale 0
+ EmissiveMap "$rendertarget"
  BCRMap "$rendertarget"
 }
