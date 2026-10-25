@@ -187,18 +187,19 @@ modded class SCR_PlayerController
 			return;
 		}
 
-		ResourceName pinkMaterial = "{6AB2F1A000000100}Common/Models/Data/CGS_Pinkifier_Pink.emat";
-		Resource loaded = Resource.Load(pinkMaterial);
-		if (!loaded || !loaded.IsValid())
-		{
-			Print("[CGS PINKIFIER] Missing target pink material resource.", LogLevel.ERROR);
-			return;
-		}
-
-		// The native Reforger SCR_Global helper recursively remaps mesh
-		// material slots on a character and worn/equipped child entities.
-		// It changes APPEARANCE only, not health, inventory or animations.
-		SCR_Global.SetMaterial(character, pinkMaterial, true);
+		// IMPORTANT CRASH FIX:
+		// The old implementation called
+		// SCR_Global.SetMaterial(character, pinkMaterial, true).
+		// That recursively called SetObject on character/gear VObjects
+		// and crashed the game when a character was shot.
+		//
+		// Never modify character VObjects or replace their .emat files
+		// at runtime for this novelty feature. Use a supported
+		// ParametricMaterialInstanceComponent on equipped clothes,
+		// changing instance tint only. Unsupported items stay intact.
+		int tinted = CGS_PinkVisuals.TintCharacter(character);
+		if (tinted > 0)
+			PrintFormat("[CGS PINKIFIER] SAFE paint applied; target=%1 coloredMaterials=%2", character, tinted);
 	}
 
 	// The weapon must be actively equipped, not merely in inventory.
