@@ -77,11 +77,15 @@ class CGS_PortalTransferComponent : ScriptComponent
 
 		// Read controller velocity first. The physics object may have no
 		// meaningful velocity for a player character.
-		vector incomingVelocity = controller.GetVelocity();
+		vector controllerVelocity = controller.GetVelocity();
 		Physics physics = character.GetPhysics();
 
-		if (incomingVelocity.LengthSq() < 0.01 && physics)
-			incomingVelocity = physics.GetVelocity();
+		if (controllerVelocity.LengthSq() < 0.01 && physics && physics.IsDynamic())
+			controllerVelocity = physics.GetVelocity();
+
+		// Use the previously CARRIED velocity when chaining portals.
+		// Safe teleport does not reliably preserve controller velocity.
+		vector incomingVelocity = CGS_PortalMomentumService.GetEffectiveVelocity(character, controllerVelocity);
 
 		// Portal-space transform: flip entry normal and local sideways axis.
 		// Falling INTO an upward-facing floor portal should launch OUT of a
@@ -141,6 +145,25 @@ class CGS_PortalTransferComponent : ScriptComponent
 			velocityApplied = true;
 		}
 
+		// The opt-in momentum service provides simulated inertia for player
+		// controllers that reject Physics.SetVelocity(). When disabled,
+		// clear existing state and retain the stable gravity-loop behavior.
+		if (destination.ShouldSimulateMomentum())
+		{
+			CGS_PortalMomentumService.Start(
+				character,
+				outgoingVelocity,
+				destination.GetMomentumCarrySeconds(),
+				destination.GetMomentumGravity(),
+				destination.GetMomentumMaxStep(),
+				source.IsDebugEnabled() || destination.IsDebugEnabled()
+			);
+		}
+		else
+		{
+			CGS_PortalMomentumService.Stop(character);
+		}
+
 		s_LastTransferTimes.Set(character, now);
 
 		if (source.IsDebugEnabled() || destination.IsDebugEnabled())
@@ -149,7 +172,8 @@ class CGS_PortalTransferComponent : ScriptComponent
 			if (s_iDebugTransfers <= 3 || s_iDebugTransfers % 10 == 0)
 			{
 				PrintFormat("[CGS PORTAL PHYSICS] Transfer #%1 %2 -> %3 exit=%4 exitNormal=%5", s_iDebugTransfers, source.GetPortalID(), destination.GetPortalID(), destinationPosition, exitNormal);
-				PrintFormat("[CGS PORTAL PHYSICS] incoming=%1 outgoing=%2 safePlayerTeleport=%3 velocityApplied=%4", incomingVelocity, outgoingVelocity, safeMode, velocityApplied);
+				PrintFormat("[CGS PORTAL PHYSICS] incoming=%1 outgoing=%2 nativeController=%3 virtualMomentum=%4", incomingVelocity, outgoingVelocity, controllerVelocity, destination.ShouldSimulateMomentum());
+				PrintFormat("[CGS PORTAL PHYSICS] safePlayerTeleport=%1 rigidBodyVelocityApplied=%2", safeMode, velocityApplied);
 				if (physics)
 					PrintFormat("[CGS PORTAL PHYSICS] Character physics exists; dynamic=%1", physics.IsDynamic());
 				else
