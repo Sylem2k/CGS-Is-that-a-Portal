@@ -8,6 +8,64 @@ class CGS_PortalTransferComponent : ScriptComponent
 	protected static ref map<IEntity, int> s_LastTransferTimes = new map<IEntity, int>();
 	protected static int s_iDebugTransfers;
 
+	// An EXIT portal must not immediately catch the same traveller and
+	// send them back. Its immunity is per-character/per-destination, not
+	// global: other players remain free to enter the portal.
+	protected static ref map<IEntity, CGS_PortalComponent> s_mProtectedExitPortals = new map<IEntity, CGS_PortalComponent>();
+	protected static ref map<IEntity, int> s_mExitProtectionStarted = new map<IEntity, int>();
+
+	// Invoked by each portal once per server frame, BEFORE testing for
+	// WALL_APPROACH, WALK_ON, PLANE, or the expanded FALL_ZONE.
+	static bool IsExitEntrySuppressed(IEntity character, CGS_PortalComponent portal)
+	{
+		if (!Replication.IsServer() || !character || !portal)
+			return false;
+
+		CGS_PortalComponent protectedExit;
+		if (!s_mProtectedExitPortals.Find(character, protectedExit) || protectedExit != portal)
+			return false;
+
+		// A short minimum block also protects against stale position
+		// history and late character-controller transform updates.
+		int now = GetGame().GetWorld().GetWorldTime();
+		int protectedSince;
+		if (s_mExitProtectionStarted.Find(character, protectedSince) && now - protectedSince < 400)
+			return true;
+
+		// Re-arm only AFTER they have left the portal's full catch area.
+		// For upward floor portals, this includes the optional expanded
+		// FALL_ZONE that otherwise causes automatic Blue<->Orange loops.
+		if (portal.IsWithinExitCaptureArea(character.GetOrigin()))
+			return true;
+
+		s_mProtectedExitPortals.Remove(character);
+		s_mExitProtectionStarted.Remove(character);
+		if (portal.IsDebugEnabled())
+			PrintFormat("[CGS PORTAL REENTRY] Player cleared exit area: portal=%1; re-entry armed", portal.GetPortalID());
+		return false;
+	}
+
+	// Replacement/deletion must not leave a stale portal component inside
+	// the map, especially if the player immediately shoots that color again.
+	static void ForgetDeletedPortal(CGS_PortalComponent portal)
+	{
+		if (!portal)
+			return;
+
+		ref array<IEntity> affectedCharacters = {};
+		foreach (IEntity character, CGS_PortalComponent protectedExit : s_mProtectedExitPortals)
+		{
+			if (protectedExit == portal)
+				affectedCharacters.Insert(character);
+		}
+
+		foreach (IEntity character : affectedCharacters)
+		{
+			s_mProtectedExitPortals.Remove(character);
+			s_mExitProtectionStarted.Remove(character);
+		}
+	}
+
 	// Phase 1.3: only player characters. No vehicles or ragdolls yet.
 	static bool TryTransfer(IEntity character, CGS_PortalComponent source, CGS_PortalComponent destination, int playerId)
 	{
@@ -165,6 +223,19 @@ class CGS_PortalTransferComponent : ScriptComponent
 		}
 
 		s_LastTransferTimes.Set(character, now);
+
+		// The teleport physically moves the CHARACTER, not the portal.
+		// Clear each portal's cached pre-teleport position so a jump
+		// cannot be mistaken for movement through another entry plane.
+		source.ResetEntryHistory(character);
+		destination.ResetEntryHistory(character);
+
+		// Prevent the newly exited portal from grabbing this same
+		// character again until they have left its catch volume.
+		s_mProtectedExitPortals.Set(character, destination);
+		s_mExitProtectionStarted.Set(character, now);
+		if (source.IsDebugEnabled() || destination.IsDebugEnabled())
+			PrintFormat("[CGS PORTAL REENTRY] Protected character=%1 from immediate re-entry at exit portal=%2", character, destination.GetPortalID());
 
 		if (source.IsDebugEnabled() || destination.IsDebugEnabled())
 		{
