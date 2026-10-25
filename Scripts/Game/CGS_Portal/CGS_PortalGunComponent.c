@@ -106,6 +106,16 @@ class CGS_PortalGunComponent : ScriptComponent
 		// Later, surface-size checks can make invalid placement visible.
 		if (trace.TraceEnt)
 		{
+			// Character controllers often have NON-dynamic physics.
+			// Dynamic-physics checks alone would incorrectly allow portals
+			// on players. Explicitly refuse characters, vehicles and
+			// existing portals as unsupported host surfaces.
+			if (ChimeraCharacter.Cast(trace.TraceEnt) || Vehicle.Cast(trace.TraceEnt) || trace.TraceEnt.FindComponent(CGS_PortalComponent))
+			{
+				if (m_bDebug)
+					Print("[CGS GUN] Shot rejected: characters, vehicles and portals are not valid surfaces.");
+				return false;
+			}
 			Physics hitPhysics = trace.TraceEnt.GetPhysics();
 			if (hitPhysics && hitPhysics.IsDynamic())
 			{
