@@ -60,14 +60,24 @@ GenericEntity {
       Offset 0 0 0
      }
     }
+    // This gun has no weapon-specific animation graph or inspection state.
+    // The player's M9 pistol animation/IK comes from ItemAnimationAttributes.
     WeaponAnimationComponent "{6AB21D161F2E7092}" {
-     AnimVariablesToBind {
-      "WeaponInspectionState"
+     Enabled 0
+    }
+    // Non-ballistic placeholder. Vanilla ADS accesses GetCurrentMuzzle()
+    // without null checks even on script-only weapons. Never chamber ammo.
+    MuzzleComponent "{6AB21D161F2E7462}" {
+     FireModes {
+      BaseFireMode "{6AB21D161F2E7463}" {
+       UIName "Portal"
+      }
      }
     }
    }
    SignalsSourceAccess SignalsSourceAccessClass "{6AB21D161F2E70EA}" {
    }
+   useAimingType None
    WeaponType Handgun
    obstructionTestBBScale 0.2 0.1 0.05
    sightsCameraRollScaler -1
@@ -116,6 +126,14 @@ GenericEntity {
      "Sort Priority" 2
     }
    }
+  }
+  CGS_PortalGunComponent "{6AB21D161F2E7461}" {
+   m_sBluePortalPrefab "{E5DA100433B35A4E}Prefabs/Weapons/Core/Blue_Portal.et"
+   m_sOrangePortalPrefab "{EA7C0FE5E8E2E3C0}Prefabs/Weapons/Core/Orange_Portal.et"
+   m_fShotDistance 90
+   m_fSurfaceOffset 0.04
+   m_iShotCooldownMs 200
+   m_bDebug 1
   }
   NwkPhysicsMovementComponent "{6AB21D161F2E7321}" {
   }

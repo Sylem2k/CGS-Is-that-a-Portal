@@ -376,3 +376,41 @@ Portal-to-portal travel distance remains unlimited; the 90 m raycast cap is the 
 8. Then test two connected players; confirm both can own their own pairs and travel through either pair.
 
 **New files:** `Scripts/Game/CGS_Portal/CGS_PortalGunComponent.c` and `Scripts/Game/CGS_Portal/CGS_PortalPlayerController.c`. Existing files updated: `CGS_PortalManagerComponent.c`, `CGS_PortalComponent.c`, and `Portal_Gun_.et`.
+
+
+## Phase 2.1b — ADS null-pointer crash and dropped gun component repair
+
+**Branch:** `feature/portal-gun-ads-safety-fix`. Workbench/runtime confirmation pending.
+
+### Reported failure
+
+The latest Workbench log loaded `Portal_Gun_.et` successfully, then repeatedly logged:
+- `ANIMATION (E): anim controller initialization data is invalid (graph , node MasterControl, instance )` when the prefab was instantiated.
+- `Virtual Machine Exception` at `CharacterCameraADS.c:233`, `CharacterCameraADS.SolveNewMethod`, null return.
+
+**Root cause of ADS crash:** In Reforger's stock `CharacterCameraADS.SolveNewMethod` implementation, the current weapon's muzzle is accessed without checking it for null:
+
+`muzzleType = currentWeapon.GetCurrentMuzzle().GetMuzzleType();`
+
+Our initial simplified pistol prefab contained a `SightsComponent` and `WeaponComponent` but **no `MuzzleComponent`**. Entering ADS therefore dereferenced a nonexistent muzzle every fixed frame, flooding the script log.
+
+**Additional discovery:** The recent user push on `main` still had the resized pistol mesh and M9 item animation data but no longer included `CGS_PortalGunComponent`, so the equipped weapon would not pass the firing bridge's gun-presence check even after the camera was fixed.
+
+### Patch
+
+Only `Prefabs/Weapons/Core/Portal_Gun_.et` is changed:
+- Add an **inert `MuzzleComponent`** with one `BaseFireMode` named Portal. It has no magazine, chambered cartridge, projectile source, ballistics, casing, or damage.
+- Set `WeaponComponent.useAimingType None`, following existing non-ballistic handheld tools. This should prevent vanilla ADS camera activation while right-click still provides `CharacterWeaponADS` input to our portal-color script. It is not a dedicated custom input binding yet.
+- Disable empty/unconfigured `WeaponAnimationComponent` (previously trying to initialize without `AnimGraph` or `AnimInstance`). The existing character-side `ItemAnimationAttributes` still select stock M9 pistol animations and IK.
+- Re-add `CGS_PortalGunComponent` with Blue/Orange prefabs, 90m gun range, 200ms duplicate-fire guard. Preserve all existing custom gun mesh, grip/IK, item size, weapon primary GUID, and `.et.meta` file unchanged.
+
+### Test
+
+1. Pull `feature/portal-gun-ads-safety-fix`, reload scripts/resources, and equip the Portal Gun.
+2. Check that neither `CharacterCameraADS.SolveNewMethod` null-pointer spam nor invalid `MasterControl` animation message occurs.
+3. Verify pistol placement in the hand, holstering, dropping, and re-equipping remain unchanged.
+4. Aim at a broad wall and left-click once (Blue). Right-click once (Orange). Expected: `[CGS GUN INPUT]`, `[CGS GUN RPC]`, and `[CGS GUN]` shot logs.
+5. Try both directions of travel, then replace a color by firing it again. Verify only the owner's matching color moves.
+6. If Orange input stops working after ADS was disabled, the next step is **a dedicated custom secondary input action**, rather than re-enabling the broken ADS camera.
+
+This fix has not been tested in Workbench from ChatGPT. No changes were made to existing portal travel/return detection, ownership maps, or momentum code.
