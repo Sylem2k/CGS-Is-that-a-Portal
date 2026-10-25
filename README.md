@@ -766,3 +766,30 @@ I found that I had written `[RplProp()]` immediately above `[Attribute(...)]` as
 I corrected the field to `[Attribute("0", UIWidgets.EditBox, "Portal owner player ID. 0 = shared test portal"), RplProp()]`. The owner-ID value, call to `Replication.BumpMe()` on server assignment, existing gun logic, prefabs, traversal, teleportation, exit guard, and camera code are unchanged.
 
 This is PR #24, an urgent one-line parser fix. It still needs a full Game script compile in Workbench. I will only diagnose any subsequent errors from the *new* compiler output; I should not assume all errors are resolved until Workbench confirms it.
+
+
+## Phase 2.4b — Align my imported portal frame to walls, floors and ceilings
+
+After merging the new live PiP frames into the real gun portal prefabs, I found that the portal **visuals** were rotated 90 degrees. My screenshot shows a horizontally sliced ring against a wall and an upright portal when placed on the ground.
+
+The logs prove the **existing logical portal normal was aligned correctly** with the raycast surface. For example, my wall hit logged `alignment=1`, and my floor hits logged `normal=<0,1,0> alignment=1`. I confirmed that the problem was not the hit trace or the teleport calculation: the old gun rotation and `m_iFacingAxis` settings were still configured for the previous sample XZ-facing meshes.
+
+The imported `Blue_Portal_Frame.xob` and `Orange_Portal_Frame.xob` use a flat XY viewing surface, so their visible face is local **+Z**. The old prefabs were still configured for `Blue: -Y` and `Orange: +Y`. Placing the new visual mesh into the old transform produced the 90-degree mismatch.
+
+### What I changed
+
+- I updated `CGS_PortalGunComponent.c` so **both colors** spawn with `Transform[0]=portalRight`, `Transform[1]=portalUp`, `Transform[2]=surfaceNormal`. This aligns the imported frame's face and its real screen plane with the surface normal.
+- I set `CGS_PortalComponent.m_iFacingAxis 0` in both `Blue_Portal.et` and `Orange_Portal.et`. Axis 0 selects local **+Z** for portal traversal, precisely matching the model now. The crossing and exit basis stays consistent with the visual model.
+- I did **not** modify either imported XOB file, its material slots, the working PiP render-to-texture component, per-client HDR handling, the raycast, the server-owned teleport method, the anti-reentry loop fix, momentum, or the gun input setup.
+- I kept all original prefab paths, entity GUIDs and the remaining portal configuration settings unchanged.
+
+### My next Workbench tests
+
+1. Pull the orientation fix and compile.
+2. Shoot a Blue portal into a vertical wall: the **entire ellipse should be upright and flush with the wall**, rather than a horizontal bar. Shoot Orange at another wall and check the same.
+3. Shoot Blue and Orange on flat terrain: the **whole portal should lie flat on the ground** with its opening facing upward, not stand like a doorway.
+4. Try a slope and a ceiling to verify the imported frame follows the true surface normal.
+5. Verify the logs still say `[CGS GUN ALIGN] ... alignment=1` for all supported surfaces, and that each color shows the other portal's PiP feed.
+6. Walk through both directions and check that my anti-reentry protection still stops bounce loops. When I replace a portal with another gunshot, the matching view should rebind without stealing another player's pair.
+
+**Status:** This is a source-level repair pushed as a separate PR, not yet compiled/tested by Workbench. If a model still appears 90 degrees out after the update, I will compare the actual mesh front axis and its Workbench import rotation before changing any gameplay/teleport code again.
