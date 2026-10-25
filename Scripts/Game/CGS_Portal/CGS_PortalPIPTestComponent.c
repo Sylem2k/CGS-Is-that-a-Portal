@@ -281,19 +281,21 @@ class CGS_PortalPIPTestComponent : ScriptComponent
 	//------------------------------------------------------------------------------------------------
 	protected void DestroyPreview()
 	{
-		// Unbind first. Removing a render target after its material or
-		// owner has gone away can crash the engine's render thread.
-		if (m_wRTTexture && GetOwner() && !GetOwner().IsDeleted())
-			m_wRTTexture.RemoveRenderTarget(GetOwner());
-
-		if (m_wView)
-			m_wView.SetWorld(null, m_iCameraIndex);
-
+		// Remove the independent HUD preview first so nothing continues
+		// sampling RTTexture0 during shutdown / Workbench reload.
 		if (m_wDebugHUD)
 			m_wDebugHUD.RemoveFromHierarchy();
 
 		m_wDebugHUD = null;
 		m_wDebugHUDImage = null;
+
+		// Then unbind the mesh material before removing the render-target
+		// layout and ScriptCamera (native render thread owns these refs).
+		if (m_wRTTexture && GetOwner() && !GetOwner().IsDeleted())
+			m_wRTTexture.RemoveRenderTarget(GetOwner());
+
+		if (m_wView)
+			m_wView.SetWorld(null, m_iCameraIndex);
 
 		if (m_wUIRoot)
 			m_wUIRoot.RemoveFromHierarchy();
