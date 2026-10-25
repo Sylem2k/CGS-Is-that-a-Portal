@@ -4,9 +4,8 @@ GenericEntity {
   CGS_PortalComponent "{6AB20E69D31F3B06}" {
    m_iPortalID 0
    m_bEnabled 1
-   m_fExitOffset 1.5
+   m_fExitOffset 0
    m_fActivationDistance 1
-   m_bDebug 1
   }
   RplComponent "{6AB20E69D31FBED5}" {
    "Rpl State Override" Runtime
@@ -16,4 +15,5 @@ GenericEntity {
   }
  }
  Flags 0x400003 0
+ coords 120.005 4.273 99.914
 }
