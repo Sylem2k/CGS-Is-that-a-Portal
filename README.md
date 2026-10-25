@@ -585,3 +585,33 @@ Changes in `fix/portal-pip-live-camera`:
 6. If the camera forward vector is nearly vertical, rotate the Orange test frame upright to get a scene instead of sky/ground.
 
 Do not turn on the Orange feed yet. Two-way recursive rendering, viewer-relative parallax, full multiplayer pairing, and clipping are future phases.
+
+## Phase 2.3b — PiP viewport dimensions and independent visual diagnostics
+
+I ran the second test after merging PR #17. The camera was created and world-camera readback succeeded, but the Blue portal still showed no live picture.
+
+### Findings
+
+- The log confirmed slot 20 had a real camera, but its forward direction was `(0,1,0)`, pointing straight up, which could make the view featureless.
+- The initial sample also logged camera origin around `(0,2.25,0)`. A later world load showed separately placed test portals around `(2215,55,2904)` and `(2251,55,2879)`. These appeared in different reload sections of the log, so I need the same-run position diagnostic to know if there is a real camera-coordinate problem.
+- The nested RenderTarget0 in `CGS_PortalPIP_Test.layout` used stretch anchors plus `SizeX -512` and `SizeY -512` under a 512px parent. Those offsets can collapse the drawable region. I changed both SizeX and SizeY to 0 for full stretch and added actual widget dimension readback.
+
+### Changes
+
+- `UI/Layouts/CGS_PortalPIP_Test.layout`: fixes RenderTarget0 stretched size, using SizeX 0 and SizeY 0.
+- `Scripts/Game/CGS_Portal/CGS_PortalPIPTestComponent.c`: adds widget-size logging, logs partner world position on camera creation and readback, and adds a horizontal-facing camera fallback when test portal is pointing upward.
+- `UI/Layouts/CGS_PortalPIP_DebugHUD.layout` and `.meta`: introduces an optional small image on my local HUD that samples the same RTTexture widget directly using `ImageWidget.SetImageTexture(0, texture)`. This bypasses the XOB/material assignment completely.
+- `Blue_Portal_PIP_Test.et`: HUD enabled, camera follows partner and looks horizontally if the test frame is face-up.
+- `Orange_Portal_PIP_Test.et`: still has its own live PiP feed disabled; it is the source location for Blue's test.
+
+### My next Workbench test
+
+1. Pull PR #18, compile, enter Play with one Blue and one Orange PiP test prefab; no gun portal changes.
+2. The temporary camera preview should be visible in a **256x256 area at the upper-left HUD**. Inspect the in-world Blue portal plane separately.
+3. Read `[CGS PORTAL PIP CAMERA] ScriptCamera CREATED ... partnerPosition=...` and `[CGS PORTAL PIP CAMERA] World camera READBACK ... partnerPosition=...`. Camera origin should be close to Orange test portal world position, offset roughly 0.25m in the chosen viewing direction.
+4. Read `[CGS PORTAL PIP LAYOUT] RTTexture0=...x... RenderTarget0=...x...`. Both dimensions must be greater than zero.
+5. If the **HUD shows the remote world** but the portal plane does not, the camera and widget work. Inspect `Blue_Portal_Frame.xob.meta` source material `CGS_Portal_BLUE_Screen_PLACEHOLDER` and the `CGS_Portal_PIP_Screen_TEST.emat` assignment; reimport XOB.
+6. If **both HUD and portal plane are blank**, inspect render-widget dimensions and camera origin/forward before changing the model.
+7. Keep Orange feed disabled until the one-way Blue test is verified. Disable the debug HUD when done.
+
+This is a temporary diagnostic PIP test. The existing functioning portal gun and standard Blue/Orange portal prefabs, all shooting controls, re-entry protection, and teleport logic remain untouched.
