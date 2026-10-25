@@ -56,6 +56,17 @@ class CGS_PortalTransferComponent : ScriptComponent
 		float side = vector.Dot(relativePosition, sourceRight);
 		float height = vector.Dot(relativePosition, sourceUp);
 
+		// Optional centering for gravity-loop experiments. With scale 0,
+		// running onto the floor portal never places you off-center
+		// when emerging from the ceiling.
+		float lateralScale = destination.GetExitLateralScale();
+		if (lateralScale < 0)
+			lateralScale = 0;
+		if (lateralScale > 1)
+			lateralScale = 1;
+		side = side * lateralScale;
+		height = height * lateralScale;
+
 		// Keep the character beyond the exit's early-catch zone.
 		float exitOffset = destination.GetExitOffset();
 		float minOffset = destination.GetFrontCatchDistance() + 0.75;
@@ -105,7 +116,7 @@ class CGS_PortalTransferComponent : ScriptComponent
 			character.SetWorldTransform(characterMatrix);
 
 		bool velocityApplied = false;
-		if (destination.ShouldPreserveMomentum() && physics)
+		if (destination.ShouldPreserveMomentum() && physics && physics.IsDynamic())
 		{
 			// Experimental: on some character controllers Physics.SetVelocity
 			// may not control actual movement even when a physics body exists.
@@ -126,6 +137,9 @@ class CGS_PortalTransferComponent : ScriptComponent
 					PrintFormat("[CGS PORTAL PHYSICS] Character physics exists; dynamic=%1", physics.IsDynamic());
 				else
 					Print("[CGS PORTAL PHYSICS] Character has NO Physics body: momentum cannot be set using Physics.SetVelocity.");
+
+				if (physics && !physics.IsDynamic())
+					Print("[CGS PORTAL PHYSICS] Character physics is NON-DYNAMIC: ignoring SetVelocity; character-controller momentum is not yet controllable.");
 			}
 		}
 
