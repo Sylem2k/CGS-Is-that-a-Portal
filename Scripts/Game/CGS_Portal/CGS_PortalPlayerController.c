@@ -85,6 +85,7 @@ modded class SCR_PlayerController
 
 	protected void CGS_RequestPortalShot(int color, vector cameraPosition, vector cameraForward)
 	{
+		PrintFormat("[CGS GUN INPUT] Player=%1 requested color=%2", GetPlayerId(), color);
 		// In Workbench/offline listen host the server may be local.
 		// Server RPCs are not guaranteed to loop back when invoked
 		// through Rpc() from their own authoritative instance.
@@ -102,8 +103,12 @@ modded class SCR_PlayerController
 
 		CGS_PortalGunComponent equippedGun = CGS_GetEquippedPortalGun();
 		if (!equippedGun)
+		{
+			PrintFormat("[CGS GUN RPC] Server rejected player=%1 color=%2: portal gun not actively equipped", GetPlayerId(), color);
 			return;
+		}
 
+		PrintFormat("[CGS GUN RPC] Server received player=%1 color=%2", GetPlayerId(), color);
 		equippedGun.ServerTryPlacePortal(this, color, cameraPosition, cameraForward);
 	}
 }
