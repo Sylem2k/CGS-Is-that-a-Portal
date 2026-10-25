@@ -647,3 +647,22 @@ My logs confirm these facts in one game session:
 6. Never enable Orange's second camera feed until this one-way proof works.
 
 This is still an uncompiled Workbench experiment and should remain a draft PR until the direct HUD camera is verified.
+
+## Phase 2.3d — Switch verified remote camera from HUD to Blue portal mesh
+
+**My successful test:** After pulling PR #19, I can see a real-time picture of the distant trees/area at Orange's location in the small HUD camera window. My logs confirm Blue and Orange world coordinates, a correctly placed ScriptCamera on slot 20, and the message `[CGS PORTAL PIP HUD] DIRECT world-camera widget created`.
+
+I verified that **rendering a second view of the same world is technically possible in Reforger**. However, the render-to-mesh path has not yet been verified; the oval stayed white on purpose during HUD-only diagnostic mode.
+
+**This change:** I switched `Prefabs/Weapons/Core/Blue_Portal_PIP_Test.et` from `m_bDebugHUD 1` to `m_bDebugHUD 0`. The existing `CGS_PortalPIPTestComponent.c` now uses its Stage B route: it calls `RenderTargetWidget.SetWorld(world, cameraIndex)`, enables that widget, then calls `RTTextureWidget.SetRenderTarget(GetOwner())`. The frame XOB's ViewPlane material is already assigned to `CGS_Portal_PIP_Screen_TEST.emat`, which uses `BCRMap "$rendertarget"`. The small HUD preview no longer appears.
+
+### Next test
+
+1. Pull the Stage B branch, compile Game scripts, enter Play with one `Blue_Portal_PIP_Test.et` and one `Orange_Portal_PIP_Test.et`.
+2. Look at Blue's oval plane: it should now display the scene previously shown in the debug HUD, instead of solid white.
+3. Confirm `[CGS PORTAL PIP MESH] Render target bound to ViewPlane. Camera diagnostic HUD disabled.` and `[CGS PORTAL PIP] LIVE mesh feed bound: color=0 camera=20 partner=1 ...`.
+4. Confirm `[CGS PORTAL PIP LAYOUT] ... RenderTarget0=...x...` has positive dimensions again.
+5. If the plane stays white even with correct logs, inspect the frame's source material assignment for `CGS_Portal_BLUE_Screen_PLACEHOLDER` and **reimport `Blue_Portal_Frame.xob`**. Also inspect the ViewPlane normals/UVs and `CGS_Portal_PIP_Screen_TEST.emat`. The camera is already independently proven.
+6. Leave Orange feed off until the one-way Blue mesh feed works. Two-way recursive camera rendering, per-viewer perspective, and multi-client performance remain future phases.
+
+**Safety:** Both stage-A and stage-B tests use separate `*_PIP_Test.et` prefabs with teleport disabled. I made no change to the working gun, its normal portal prefabs, controls, placement or teleportation. All camera tests remain experimental until tested in Workbench.
