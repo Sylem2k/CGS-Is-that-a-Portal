@@ -45,6 +45,12 @@ class CGS_PortalComponent : ScriptComponent
 	[Attribute("45", UIWidgets.EditBox, "EXPERIMENT: max exit speed in m/s; 0 means uncapped")]
 	protected float m_fMaxExitSpeed;
 
+	[Attribute("1", UIWidgets.CheckBox, "Draw +Z exit facing arrow and trigger outline during play")]
+	protected bool m_bShowFacingArrow;
+
+	[Attribute("2.5", UIWidgets.EditBox, "Facing arrow length in meters")]
+	protected float m_fFacingArrowLength;
+
 	protected int m_iSuccessfulTransfers;
 
 	protected ref map<IEntity, vector> m_mPreviousPositions = new map<IEntity, vector>();
@@ -67,15 +73,79 @@ class CGS_PortalComponent : ScriptComponent
 
 		CGS_PortalManagerComponent.RegisterPortal(this);
 		if (m_bDebug)
-			{
+		{
 			vector initTransform[4];
 			owner.GetWorldTransform(initTransform);
-			PrintFormat("[CGS PORTAL] Registered ID=%1 position=%2 outward normal=%3", m_iPortalID, initTransform[3], initTransform[2]);
+
+			string facing = "SIDEWAYS";
+			if (initTransform[2][1] > 0.75)
+				facing = "UP";
+			else if (initTransform[2][1] < -0.75)
+				facing = "DOWN";
+
+			PrintFormat("[CGS PORTAL FACING] ID=%1 position=%2 +Z normal=%3 facing=%4", m_iPortalID, initTransform[3], initTransform[2], facing);
 		}
+	}
+
+	// Debug shapes only. The green arrow is the actual +Z EXIT vector.
+	// The blue/yellow rectangle shows the early entry catch plane.
+	protected void DrawFacingDebug(IEntity owner)
+	{
+		vector transform[4];
+		owner.GetWorldTransform(transform);
+
+		float length = m_fFacingArrowLength;
+		if (length < 0.5)
+			length = 0.5;
+
+		vector origin = transform[3];
+		vector direction = transform[2];
+		vector tip = origin + direction * length;
+		vector wingBase = tip - direction * 0.5;
+		vector segment[2];
+		int frameColor = Color.BLUE;
+		if (m_iPortalID == 1)
+			frameColor = Color.YELLOW;
+
+		segment[0] = origin;
+		segment[1] = tip;
+		Shape.CreateLines(Color.GREEN, ShapeFlags.ONCE | ShapeFlags.NOZBUFFER, segment, 2);
+		segment[0] = tip;
+		segment[1] = wingBase + transform[0] * 0.35;
+		Shape.CreateLines(Color.GREEN, ShapeFlags.ONCE | ShapeFlags.NOZBUFFER, segment, 2);
+		segment[1] = wingBase - transform[0] * 0.35;
+		Shape.CreateLines(Color.GREEN, ShapeFlags.ONCE | ShapeFlags.NOZBUFFER, segment, 2);
+
+		float catchDistance = m_fFrontCatchDistance;
+		if (catchDistance < 0)
+			catchDistance = 0;
+		vector center = origin + direction * catchDistance;
+		vector right = transform[0] * m_fHalfWidth;
+		vector up = transform[1] * m_fHalfHeight;
+		vector a = center + right + up;
+		vector b = center - right + up;
+		vector c = center - right - up;
+		vector d = center + right - up;
+
+		segment[0] = a;
+		segment[1] = b;
+		Shape.CreateLines(frameColor, ShapeFlags.ONCE | ShapeFlags.NOZBUFFER, segment, 2);
+		segment[0] = b;
+		segment[1] = c;
+		Shape.CreateLines(frameColor, ShapeFlags.ONCE | ShapeFlags.NOZBUFFER, segment, 2);
+		segment[0] = c;
+		segment[1] = d;
+		Shape.CreateLines(frameColor, ShapeFlags.ONCE | ShapeFlags.NOZBUFFER, segment, 2);
+		segment[0] = d;
+		segment[1] = a;
+		Shape.CreateLines(frameColor, ShapeFlags.ONCE | ShapeFlags.NOZBUFFER, segment, 2);
 	}
 
 	override void EOnFrame(IEntity owner, float timeSlice)
 	{
+		if (m_bShowFacingArrow)
+			DrawFacingDebug(owner);
+
 		if (!Replication.IsServer() || !m_bEnabled)
 			return;
 
