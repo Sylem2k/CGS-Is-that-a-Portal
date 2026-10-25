@@ -82,3 +82,40 @@ Each stationary portal prefab now enables `m_bShowFacingArrow 1`.
 - These markers do not repair camera alignment, collision damage, or physical character momentum. They are intended to make incorrect orientation obvious before physics tests.
 
 If Workbench continues printing `[CGS PORTAL] SetOrigin executed`, an earlier script version is loaded. The current main branch instead reports `[CGS PORTAL PHYSICS]` and `[CGS PORTAL FACING]`. Confirm the addon/branch is up to date and reload Game scripts.
+
+
+## Phase 1.4 — Select portal model-face axis (test branch)
+
+Branch: `feature/portal-facing-axis`. Changes **not yet compiled in Workbench**.
+
+### Why this exists
+
+The current test portal meshes lie flat in local XZ. Enfusion world Y is vertical, so using local +Z as the portal face normal incorrectly launches players sideways. This change lets the component choose which local axis is the physical entrance and exit normal, applying the choice consistently to crossing detection, debug arrows, exit positioning, and velocity transformation.
+
+### Face Axis property
+
+| Value | Portal face normal |
+| --- | --- |
+| 0 | local +Z (legacy) |
+| 1 | local +Y (flat mesh, entrance from above) |
+| 2 | local -Y (flat mesh, entrance from below) |
+| 3 | local -Z |
+| 4 | local +X |
+| 5 | local -X |
+
+The prefabs are configured **Orange = 1 (+Y, floor)** and **Blue = 2 (-Y, ceiling)**. Rotate/position the whole entity as needed; these axes remain *local* to each prefab.
+
+The console now reports `[CGS PORTAL FACING] ID=... faceAxis=... normal=... facing=UP/DOWN/SIDEWAYS`. Expected log when both meshes are placed flat, not rotated:
+- Orange ID=1 normal approximately `<0,1,0>` facing UP.
+- Blue ID=0 normal approximately `<0,-1,0>` facing DOWN.
+
+The runtime green facing arrow and colored trigger-plane rectangle also use the new normal, rather than always local +Z. They are debug shapes and may not be visible in the static World Editor view.
+
+### Test
+
+1. Pull/check out the branch; compile game scripts.
+2. Place Orange flat on floor, Blue flat on the ceiling directly above it (no need to rotate flat meshes if the underside should face down).
+3. Confirm the portal facing diagnostics. If either still reads SIDEWAYS, inspect its entity rotation or Face Axis property.
+4. Fall into Orange and verify the exit occurs *below* Blue. Watch `[CGS PORTAL PHYSICS]` for normal and velocity.
+
+This addresses incorrect portal-facing direction, not guaranteed character-controller momentum or collision-damage immunity. Keep the previous main behavior available until testing.
