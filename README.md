@@ -692,3 +692,32 @@ I tested PR #20: the camera still renders correctly and the scripts report that 
 4. If the material loads and the correct source slot was successfully remapped but the oval still stays blank, I will test the same `RTTexture0` with a simple changing text payload before introducing a second camera or changing the working teleport system.
 
 **Status:** GitHub PR only; uncompiled in Workbench. Shader and material remap behavior still require in-game confirmation.
+
+## Phase 2.3f — Live Blue portal visible, but remote scene too dark
+
+I have now confirmed that the imported Blue frame receives a genuine live picture from Orange. After PR #21, the ViewPlane showed the distant cabin and trees through the oval, rather than an opaque white screen. The camera was correct all along, and the actual imported XOB screen material name was `CGS_Portal_BLUE_Screen_PLACEHOLDER`; runtime `$remap` and the emissive render-target material were the important final connection.
+
+### My next correction: copy the active player's HDR exposure
+
+The live image is significantly darker than the current player's world view. I checked the official Reforger `SCR_2DPIPSightsComponent.UpdateHDR()` implementation. Vanilla PIP sights query the current player's camera via `GetGame().GetCameraManager().CurrentCamera()`, then obtain the main camera's exposure using `BaseWorld.GetCameraHDRBrightness(mainCameraIndex)` and apply it to the picture-in-picture camera with `BaseWorld.SetCameraHDRBrightness(pipIndex, hdrBrightness)` **every frame**.
+
+My portal camera did not previously do that. It had its own exposure which might not match the game camera. I added `SyncRemoteCameraHDR()` in `CGS_PortalPIPTestComponent.c`, using the stock PIP exposure-matching method.
+
+### Changes in the test branch
+
+- New GM/Workbench component parameter `m_bMatchPlayerHDR`: 1 by default. If disabled, the PiP camera's exposure remains unmanaged like the old version.
+- New parameter `m_fHDRExposureMultiplier`: 1.0 by default, meaning match the live player's camera. If needed, I can try 1.5 or 2.0 to increase the remote image brightness, or lower the value if the picture becomes too bright.
+- During setup, synchronize PiP HDR before activating its RenderTargetWidget. During every frame, update to match changes in the player's exposure (moving indoors/outdoors or through time-of-day/weather changes).
+- New one-time `[CGS PORTAL PIP HDR]` logging reports the main camera index, its exposure, the portal camera slot (20), its applied exposure and the multiplier.
+- The Blue test prefab explicitly sets HDR matching ON and multiplier 1.0.
+- This is only a brightness fix. I **did not change** the now-working emissive screen shader, runtime source material remap, mesh XOB/meta, camera placement, working gun prefabs, player controls, teleportation, or the anti-reentry protection.
+
+### My next Workbench test
+
+1. Pull this branch (PR #22) and compile Game scripts.
+2. Keep the same Blue and Orange PiP test prefabs. The Blue HDR-matching parameter should read ON, exposure multiplier 1.0.
+3. In Play, compare the live picture on Blue to the nearby terrain and inspect the `[CGS PORTAL PIP HDR]` output.
+4. If still visibly dark, try increasing `m_fHDRExposureMultiplier` to 1.5 or 2.0 on Blue's CGS Portal PiP Test component, then rerun. If the image brightens but has poor contrast, the next isolated shader test will use the `MatCommon { AlbedoMap "$rendertarget"; DisablePrexposure 1 }` pattern from a known existing PiP material. I will not discard the currently working screen material until that alternative has been tested.
+5. Leave Orange's camera disabled until one-way Blue has correct exposure. No recursion protection, viewer-relative parallax, or multiplayer personal portal pairing has been added.
+
+**Status:** Script changes are pushed, but they still require Workbench compilation and a brightness screenshot.

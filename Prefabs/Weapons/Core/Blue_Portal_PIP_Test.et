@@ -20,6 +20,8 @@ GenericEntity {
    m_fCameraOutset 0.25
    m_bDebug 1
    m_bDebugHUD 0
+   m_bMatchPlayerHDR 1
+   m_fHDRExposureMultiplier 1.0
    m_bUseHorizontalTestView 1
   }
   MeshObject "{6AB25DDA4F023003}" {

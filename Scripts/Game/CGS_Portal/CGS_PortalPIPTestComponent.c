@@ -4,7 +4,9 @@
 // Uses the SAME engine pipeline as Reforger's own PIP weapon optics:
 //    RenderTargetWidget.SetWorld(world, cameraIndex)
 //    RTTextureWidget.SetRenderTarget(portalEntity)
-//    BCRMap + EmissiveMap "$rendertarget" on the ViewPlane material.\n//    Test-only SetObject("$remap...") forces the material on the actual XOB.
+//    BCRMap + EmissiveMap "$rendertarget" on the ViewPlane material.
+//    Test-only SetObject("$remap...") forces the material on the XOB.
+//    The remote camera copies exposure from the LOCAL PLAYER camera.
 //
 // Add ONLY to the new *_PIP_Test.et prefabs. Existing gameplay portal
 // prefabs, controls, ownership and teleport code remain untouched.
@@ -54,6 +56,12 @@ class CGS_PortalPIPTestComponent : ScriptComponent
 	[Attribute("{6AB25DDA4F038010}UI/Layouts/CGS_PortalPIP_DebugHUD.layout", UIWidgets.ResourceNamePicker, "Temporary independent HUD image to check render target separately from the portal material", "layout")]
 	protected ResourceName m_sDebugHUDLayout;
 
+	[Attribute("1", UIWidgets.CheckBox, "Match remote PIP camera exposure to my currently active player camera each frame (stock Reforger PIP scopes do this).")]
+	protected bool m_bMatchPlayerHDR;
+
+	[Attribute("1.0", UIWidgets.EditBox, "Relative PIP HDR exposure multiplier. 1.0 = match player; try 1.5 or 2.0 if still dark.")]
+	protected float m_fHDRExposureMultiplier;
+
 	[Attribute("1", UIWidgets.CheckBox, "Only for first PIP test: if partner normal points straight up/down, point camera horizontally to see scenery.")]
 	protected bool m_bUseHorizontalTestView;
 
@@ -73,6 +81,65 @@ class CGS_PortalPIPTestComponent : ScriptComponent
 	protected bool m_bStartScheduled;
 	protected float m_fDiagnosticClock;
 	protected bool m_bPrintedCameraReadback;
+
+	//------------------------------------------------------------------------------------------------
+	// Reforger's stock SCR_2DPIPSightsComponent.UpdateHDR() uses the
+	// EXACT same technique: read the player's current camera exposure and
+	// copy it to the PIP slot on every frame.
+	//
+	// Otherwise a secondary camera can remain on an unsuitable default
+	// HDR exposure, producing a very dark image in the portal even though
+	// world geometry and the mesh render-target binding work perfectly.
+	//
+	// Workbench: m_fHDRExposureMultiplier defaults to 1.0; adjust to
+	// 1.5 or 2.0 if the remote view is still too dark relative to the
+	// scene around the player. This is PER-CLIENT and NOT replicated.
+	protected void SyncRemoteCameraHDR(bool printOnce = false)
+	{
+		if (!m_bMatchPlayerHDR || !HasLocalRenderer())
+			return;
+
+		IEntity owner = GetOwner();
+		if (!owner)
+			return;
+
+		BaseWorld world = owner.GetWorld();
+		if (!world)
+			return;
+
+		int sourceIndex = 0;
+		CameraManager manager = GetGame().GetCameraManager();
+		if (manager)
+		{
+			CameraBase camera = manager.CurrentCamera();
+			if (camera)
+				sourceIndex = camera.GetCameraIndex();
+		}
+
+		// Never feed our camera slot's exposure back into itself.
+		if (sourceIndex == m_iCameraIndex)
+			sourceIndex = 0;
+
+		float playerHDR = world.GetCameraHDRBrightness(sourceIndex);
+		if (playerHDR <= 0)
+		{
+			if (printOnce && m_bDebug)
+				PrintFormat("[CGS PORTAL PIP HDR] Player camera %1 has nonpositive exposure %2; not overriding portal HDR.", sourceIndex, playerHDR);
+			return;
+		}
+
+		float multiplier = Math.Clamp(m_fHDRExposureMultiplier, 0.25, 8.0);
+		float targetHDR = playerHDR * multiplier;
+
+		// Positive HDR brightness selects manual exposure for the remote
+		// camera, keeping it consistent with the visible game camera.
+		world.SetCameraHDRBrightness(m_iCameraIndex, targetHDR);
+
+		if (printOnce && m_bDebug)
+		{
+			PrintFormat("[CGS PORTAL PIP HDR] Player camera=%1 exposure=%2; portal slot=%3 exposure=%4 (multiplier=%5)", sourceIndex, playerHDR, m_iCameraIndex, world.GetCameraHDRBrightness(m_iCameraIndex), multiplier);
+		}
+	}
 
 	//------------------------------------------------------------------------------------------------
 	override void OnPostInit(IEntity owner)
@@ -292,6 +359,10 @@ class CGS_PortalPIPTestComponent : ScriptComponent
 		world.SetCameraFarPlane(m_iCameraIndex, 1200.0);
 		world.SetCameraType(m_iCameraIndex, CameraType.PERSPECTIVE);
 		world.SetCameraLensFlareSet(m_iCameraIndex, CameraLensFlareSetType.FirstPerson, string.Empty);
+
+		// IMPORTANT: match current camera exposure BEFORE enabling the
+		// additional render target so its first frame is not underexposed.
+		SyncRemoteCameraHDR(true);
 
 		// Use our own known 512px layout, not a potentially masked
 		// stock rifle-optics layout.
@@ -554,6 +625,7 @@ class CGS_PortalPIPTestComponent : ScriptComponent
 		if (m_bInitialized)
 		{
 			UpdatePartnerCamera();
+			SyncRemoteCameraHDR();
 
 			// One-time readback: the old "feed bound" message only
 			// established the widget binding, NOT the camera view.
@@ -568,6 +640,8 @@ class CGS_PortalPIPTestComponent : ScriptComponent
 					vector currentPartnerWorld[4];
 					m_pPartner.GetOwner().GetWorldTransform(currentPartnerWorld);
 					PrintFormat("[CGS PORTAL PIP CAMERA] World camera READBACK slot=%1 origin=%2 forward=%3 partnerWorld=%4", m_iCameraIndex, actual[3], actual[2], currentPartnerWorld[3]);
+					if (m_bMatchPlayerHDR)
+						SyncRemoteCameraHDR(true);
 					float outerW;
 					float outerH;
 					float innerW;
