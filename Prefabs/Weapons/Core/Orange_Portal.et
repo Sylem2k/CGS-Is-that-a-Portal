@@ -5,12 +5,15 @@ GenericEntity {
    m_iPortalID 1
    m_bEnabled 1
    m_fExitOffset 1.5
-   m_fActivationDistance 2
+   m_fActivationDistance 4
    m_bDebug 1
    m_bUsePlaneCrossing 1
-   m_fHalfWidth 1.5
-   m_fHalfHeight 2
-   m_fCrossingStep 2
+   m_fHalfWidth 4
+   m_fHalfHeight 4
+   m_fCrossingStep 4
+  }
+  MeshObject "{6AB21D04F1669F63}" {
+   Object "{654C96CCE67E3143}Common/Models/Portal_Test_Orange.xob"
   }
   RplComponent "{6AB20E69F5EA96AD}" {
    "Rpl State Override" Runtime
@@ -18,10 +21,7 @@ GenericEntity {
   }
   Hierarchy "{6AB20E69F5EA96A8}" {
   }
-  MeshObject "{6AB21D04F1669F63}" {
-   Object "{654C96CCE67E3143}Common/Models/Portal_Test_Orange.xob"
-  }
  }
  Flags 0x400003 0
- coords 117.827 1.868 76.512
+ coords 118.551 1 83.142
 }

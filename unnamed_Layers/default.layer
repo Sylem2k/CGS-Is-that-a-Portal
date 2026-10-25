@@ -1,5 +1,5 @@
 GenericEntity : "{E5DA100433B35A4E}Prefabs/Weapons/Core/Blue_Portal.et" {
- coords 118.202 2.908 72.892
+ coords 118.202 2.789 85.499
  angles -89.458 -180 -180
 }
 GenericEntity : "{EA7C0FE5E8E2E3C0}Prefabs/Weapons/Core/Orange_Portal.et" {
