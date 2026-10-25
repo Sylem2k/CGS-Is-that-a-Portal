@@ -469,3 +469,38 @@ This proves the Blue path is firing reliably and the Orange action **does not ex
 - Confirm movement, menu inputs, other weapons, and multiplayer replication remain functional: this patch changes the **project's input default**, so the inherited vanilla input config must be validated.
 
 **Note:** Workbench can have extra addon dependencies with their own overrides to `chimeraInputCommon.conf`. Our config inherits the vanilla base and may need additional handling if another addon modifies the same resource, so test with the project's actual mod set.
+
+
+## Phase 2.2 — Automatic portal alignment to hit surfaces
+
+**Branch:** `feature/portal-auto-surface-orientation` — **Workbench compile and in-game testing required**.
+
+I kept the proven firing and traversal system and updated only `Scripts/Game/CGS_Portal/CGS_PortalGunComponent.c`. I did not change the gun prefab, blue/orange prefab IDs, player ownership, input configuration, model, replicated portal components, teleport, or momentum code.
+
+### What the gun does on every valid raycast
+
+1. Obtain the true surface normal from `TraceParam.TraceNorm`; normalize and flip it if it points along the incoming ray, so the opening always faces the shooter.
+2. Categorize the surface for diagnostics: **FLOOR** (`normal.Y >= 0.85`), **CEILING** (`normal.Y <= -0.85`), **SLOPE** (`abs(normal.Y) >= 0.4`), or **WALL**.
+3. For walls and ordinary slopes, project world vertical onto the impact plane to preserve the portal's upright orientation.
+4. For floor/ceiling surfaces, project the camera's aiming direction onto the impact plane to define the portal's oval long axis. If the camera points straight down/up, use projected world +Z as a stable fallback.
+5. Build an orthonormal surface frame: `portalRight = portalUp x normal`, then `portalUp = normal x portalRight`. The basis remains right-handed across all four surface types.
+6. Preserve each portal prefab's existing mesh-facing convention when filling the `EntitySpawnParams.Transform` matrix:
+   - **Blue** front = **local -Y**, configured in `Blue_Portal.et` as `m_iFacingAxis 2`; use `[right, -normal, up, position]`.
+   - **Orange** front = **local +Y**, configured in `Orange_Portal.et` as `m_iFacingAxis 1`; use `[right, normal, -up, position]`.
+   - Spawn center remains `hitPosition + normal * m_fSurfaceOffset`; existing offset constraints, owner replacement, surface rejection, replication, and shot cooldown are unchanged.
+7. Once spawned, log the actual mesh-facing normal through the unchanged `CGS_PortalComponent.GetPortalBasis`, along with the surface type and the alignment dot product. Expected `alignment=1`. Values below 0.9 log a warning, but don't delete the portal; this allows diagnosis of mesh/prefab orientation mistakes without breaking the working gun.
+
+### Validation steps
+
+- Pull branch and compile Game scripts.
+- Fire **Blue on LMB** and **Orange on middle mouse** at a vertical wall. Both should stand **vertically** instead of lying on the ground, with green direction arrow away from the wall.
+- Fire at the floor: portal should be flat, facing **UP**; try walking on it.
+- Shoot the **underside of a ceiling**: portal should be flat, facing **DOWN**; try falling out of it.
+- Shoot a slope: oval should lie flush with the sloped surface.
+- Check the log:
+  `[CGS GUN ALIGN] Player=1 color=0 surface=WALL hitNormal=<...> portalNormal=<...> alignment=1 top=<...>`
+  (same for Orange, FLOOR, CEILING, SLOPE).
+- Test wall-to-wall teleport both ways and floor-to-ceiling travel (keep original physics/return settings).
+- Test same-color replacement and separate players' pairs, to confirm no regressions.
+
+**Known limitations:** Only static collision surfaces are supported. This patch aligns the *portal opening*, not the *character's rotation* after teleportation; the existing safe-player teleport intentionally preserves upright player facing. Portal surface-size validation and clipping into narrow/uneven walls remain future work.
