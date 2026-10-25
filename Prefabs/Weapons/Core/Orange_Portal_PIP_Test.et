@@ -1,0 +1,27 @@
+// PiP proof-of-concept only; does NOT replace stable Blue_Portal / Orange_Portal.
+// Disable ordinary travel while evaluating camera feeds, and keep frame/glow intact.
+GenericEntity {
+ ID "6AB25DDA4F023100"
+ components {
+  CGS_PortalComponent "{6AB25DDA4F023101}" {
+   m_iPortalID 1
+   m_iFacingAxis 1
+   m_bEnabled 0
+   m_bDebug 0
+   m_bShowFacingArrow 0
+  }
+  CGS_PortalPIPTestComponent "{6AB25DDA4F023102}" {
+   m_bPreviewEnabled 0
+   m_iCameraIndex 21
+   m_iMaxFPS 12
+   m_fResolutionScale 0.5
+   m_fCameraFOV 75
+   m_fCameraOutset 0.25
+   m_bDebug 1
+  }
+  MeshObject "{6AB25DDA4F023103}" {
+   Object "{C2D10223091B0296}Common/Models/Orange_Portal_Frame.xob"
+  }
+ }
+ Flags 0x400003 0
+}
