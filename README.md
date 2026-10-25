@@ -756,3 +756,13 @@ I am now applying the same setup to Orange **and** to the real portals created b
 The first production preview is **a live remote camera image on a flat plane**, not yet a true per-eye geometric portal. I haven't implemented perspective parallax based on viewer position or clipping of objects between the exit camera and the exit plane. Opposing cameras may capture each other's screen and produce visual feedback. Each local player is capped at two simultaneous live screens for performance; more distant personal portals remain present and teleportable but may show only their inactive screen material until selected for rendering. Slots 26 and 27 are reserved for this local test and could conflict with other mods that use those particular camera indexes. A custom camera-slot allocator and per-client load policy will be needed for production on large modded servers.
 
 **Status:** unverified in Workbench for both-way runtime gun integration; the older one-way Blue test and HDR fix have been user-tested and remain our fallback baseline.
+
+## Phase 2.4a — Fix portal owner-ID annotation compile syntax
+
+After integrating the two-way gun portal picture-in-picture system in PR #23, Workbench reported six parser errors in `Scripts/Game/CGS_Portal/CGS_PortalComponent.c` before I could test the new portals.
+
+I found that I had written `[RplProp()]` immediately above `[Attribute(...)]` as separate annotation lines for the same `m_iPortalOwnerID` field. In Enfusion these two annotations must be grouped in **one bracket list**, which is how Bohemia's own scripts combine `Attribute` and `RplProp`.
+
+I corrected the field to `[Attribute("0", UIWidgets.EditBox, "Portal owner player ID. 0 = shared test portal"), RplProp()]`. The owner-ID value, call to `Replication.BumpMe()` on server assignment, existing gun logic, prefabs, traversal, teleportation, exit guard, and camera code are unchanged.
+
+This is PR #24, an urgent one-line parser fix. It still needs a full Game script compile in Workbench. I will only diagnose any subsequent errors from the *new* compiler output; I should not assume all errors are resolved until Workbench confirms it.

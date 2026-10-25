@@ -14,8 +14,7 @@ class CGS_PortalComponent : ScriptComponent
 	// PIP needs to pair each owner's Blue and Orange portals LOCALLY
 	// on every client. Server-only static manager maps do not replicate.
 	// This single RplProp keeps per-player render pairing unambiguous in MP.
-	[RplProp()]
-	[Attribute("0", UIWidgets.EditBox, "Portal owner player ID. 0 = shared test portal")]
+	[Attribute("0", UIWidgets.EditBox, "Portal owner player ID. 0 = shared test portal"), RplProp()]
 	protected int m_iPortalOwnerID;
 
 	[Attribute("1", UIWidgets.CheckBox, "Enable this portal")]
