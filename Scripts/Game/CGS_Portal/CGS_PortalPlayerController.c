@@ -143,9 +143,9 @@ modded class SCR_PlayerController
 		RpcDo_CGSPinkTarget(characterID);
 	}
 
-	// PINKIFIER - PHASE 1 SAFE DIAGNOSTIC.
-	// Target resolution is retained.
-	// Recursive material replacement is disabled.
+	// PINKIFIER - PHASE 2 CONTROLLED MATERIAL TEST.
+	// Only the root character mesh is painted; recursive child painting is disabled.
+	// Experimental: verify stability before extending the effect to equipment.
 	[RplRpc(RplChannel.Reliable, RplRcver.Broadcast)]
 	protected void RpcDo_CGSPinkTarget(RplId characterID)
 	{
@@ -171,14 +171,20 @@ modded class SCR_PlayerController
 			return;
 		}
 
-		// IMPORTANT:
-		// Original call intentionally disabled for crash isolation.
-		//
-		// SCR_Global.SetMaterial(character, pinkMaterial, true);
-		//
-		// Do not apply material changes in this diagnostic build.
+		// Only test the character's main mesh. Do not recurse into attached
+		// uniforms, gear, weapons or other child entities.
+		VObject targetMesh = character.GetVObject();
+		if (!targetMesh)
+		{
+			Print("[CGS PINKIFIER] Target has no root mesh; skipping paint.", LogLevel.WARNING);
+			return;
+		}
 
-		PrintFormat("[CGS PINKIFIER SAFE TEST] Target resolved=%1 material loaded=1 recursive paint disabled=1", character);
+		// Phase 2 experiment: native material replacement may still be unsafe
+		// even without recursion. This requires repeated Workbench testing.
+		SCR_Global.SetMaterial(character, pinkMaterial, false);
+
+		PrintFormat("[CGS PINKIFIER ROOT-ONLY TEST] Target=%1 material loaded=1 recursive paint disabled=1", character);
 	}
 
 	// PORTAL GUN - original weapon identification.
