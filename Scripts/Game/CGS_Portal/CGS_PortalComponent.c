@@ -60,6 +60,9 @@ class CGS_PortalComponent : ScriptComponent
 	[Attribute("1.0", UIWidgets.EditBox, "Exit lateral offset scale: 1=physical position, 0=center of exit portal")]
 	protected float m_fExitLateralScale;
 
+	[Attribute("1", UIWidgets.CheckBox, "Safe player teleport: use Reforger SCR_Global.TeleportPlayer (resets velocity)")]
+	protected bool m_bUseSafePlayerTeleport;
+
 
 	[Attribute("1", UIWidgets.CheckBox, "EXPERIMENT: attempt to preserve player momentum through portal")]
 	protected bool m_bPreserveMomentum;
@@ -324,41 +327,38 @@ class CGS_PortalComponent : ScriptComponent
 						}
 					}
 
-					// Optional midair rescue for floor/ceiling FUN LOOP.
-					// It catches a person falling straight down even if their
-					// sideways momentum took them beyond the visual portal.
-					// Only detects a downward crossing of the elevated plane.
+					// FUN LOOP: rescue a DESCENDING character anywhere within the
+					// elevated rescue volume, not just on the exact frame where
+					// the top plane is crossed. Large frame steps, teleport
+					// corrections and animation can skip a single-plane check.
 					if (!shouldTransfer && m_bFallCatchAssist && portalNormal[1] > 0.75)
 					{
-						float rescueDepth = m_fFallCatchHeight;
-						if (rescueDepth < m_fFrontCatchDistance + 0.1)
-							rescueDepth = m_fFrontCatchDistance + 0.1;
+						float rescueTop = m_fFallCatchHeight;
+						if (rescueTop < m_fFrontCatchDistance + 0.1)
+							rescueTop = m_fFrontCatchDistance + 0.1;
 
-						if (previousDepth > rescueDepth && currentDepth <= rescueDepth)
+						float rescueSide = vector.Dot(currentOffset, portalRight);
+						float rescueLength = vector.Dot(currentOffset, portalUp);
+						bool inFootprint = Math.AbsFloat(rescueSide) <= m_fFallCatchHalfWidth && Math.AbsFloat(rescueLength) <= m_fFallCatchHalfLength;
+
+						// A character may move only a few centimeters in one
+						// rendered frame. Check both displacement and velocity.
+						bool descending = previousPos[1] > currentPos[1] + 0.015;
+						ChimeraCharacter candidate = ChimeraCharacter.Cast(character);
+						if (candidate)
 						{
-							float stepDistanceSq = vector.DistanceSq(previousPos, currentPos);
-							if (previousPos[1] > currentPos[1] && stepDistanceSq <= m_fCrossingStep * m_fCrossingStep)
-							{
-								float depthChange = previousDepth - currentDepth;
-								if (depthChange > 0.0001)
-								{
-									float fraction = (previousDepth - rescueDepth) / depthChange;
-									vector crossingPos = previousPos + (currentPos - previousPos) * fraction;
-									vector rescueOffset = crossingPos - portalTransform[3];
-									float rescueX = vector.Dot(rescueOffset, portalRight);
-									float rescueZ = vector.Dot(rescueOffset, portalUp);
+							CharacterControllerComponent movementController = candidate.GetCharacterController();
+							if (movementController && movementController.IsFalling() && movementController.GetVelocity()[1] < -0.25)
+								descending = true;
+						}
 
-									if (Math.AbsFloat(rescueX) <= m_fFallCatchHalfWidth && Math.AbsFloat(rescueZ) <= m_fFallCatchHalfLength)
-									{
-										shouldTransfer = true;
-										entryMode = "FALL_RESCUE";
-									}
-									else if (m_bDebug)
-									{
-										PrintFormat("[CGS PORTAL FALL] Player %1 outside rescue at x=%2 z=%3 (limits x=%4 z=%5)", playerId, rescueX, rescueZ, m_fFallCatchHalfWidth, m_fFallCatchHalfLength);
-									}
-								}
-							}
+						// For an upward-facing floor portal this is a vertical
+						// prism from 0.35 m above the portal to rescueTop.
+						// Trigger BEFORE terrain collision, while falling.
+						if (descending && inFootprint && currentDepth <= rescueTop && currentDepth >= 0.35)
+						{
+							shouldTransfer = true;
+							entryMode = "FALL_ZONE";
 						}
 					}
 
@@ -398,7 +398,7 @@ class CGS_PortalComponent : ScriptComponent
 			if (!shouldTransfer)
 				continue;
 
-			if (CGS_PortalTransferComponent.TryTransfer(character, this, partner))
+			if (CGS_PortalTransferComponent.TryTransfer(character, this, partner, playerId))
 			{
 				m_iSuccessfulTransfers++;
 				if (m_bDebug && (m_iSuccessfulTransfers <= 3 || m_iSuccessfulTransfers % 10 == 0))
@@ -425,6 +425,11 @@ class CGS_PortalComponent : ScriptComponent
 	float GetExitLateralScale()
 	{
 		return m_fExitLateralScale;
+	}
+
+	bool GetUseSafePlayerTeleport()
+	{
+		return m_bUseSafePlayerTeleport;
 	}
 
 	float GetFrontCatchDistance()
