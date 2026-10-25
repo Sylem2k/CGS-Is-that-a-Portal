@@ -43,6 +43,24 @@ class CGS_PortalComponent : ScriptComponent
 	[Attribute("1.4", UIWidgets.EditBox, "Maximum player-origin height above floor portal for walking entry (meters)")]
 	protected float m_fWalkOnHeight;
 
+	// A solid wall can stop the character origin before it crosses the
+	// original trigger plane. Detect walking into the face of a vertical
+	// portal, using a chest-height probe rather than the feet position.
+	[Attribute("1", UIWidgets.CheckBox, "Allow walking back into wall portals")]
+	protected bool m_bWallEntryAssist;
+
+	[Attribute("1.75", UIWidgets.EditBox, "Wall portal approach distance from surface (meters)")]
+	protected float m_fWallEntryDistance;
+
+	[Attribute("0.85", UIWidgets.EditBox, "Wall entry character-height adjustment (meters)")]
+	protected float m_fWallEntryHeightOffset;
+
+	[Attribute("0.35", UIWidgets.EditBox, "Wall entry extra border padding (meters)")]
+	protected float m_fWallEntryEdgePadding;
+
+	[Attribute("1", UIWidgets.CheckBox, "Allow approaching wall portal from either side of the flat mesh")]
+	protected bool m_bWallEntryBothSides;
+
 	// Optional generous catch volume for a FUN floor-to-ceiling fall loop.
 	// This is separate from the visible portal's regular size.
 	[Attribute("1", UIWidgets.CheckBox, "FUN MODE: rescue falling player above an upward floor portal")]
@@ -100,6 +118,9 @@ class CGS_PortalComponent : ScriptComponent
 	protected int m_iSuccessfulTransfers;
 
 	protected ref map<IEntity, vector> m_mPreviousPositions = new map<IEntity, vector>();
+
+	// Debug each wall approach at most once every 1.5 seconds per player.
+	protected ref map<IEntity, int> m_mLastWallDebugTimes = new map<IEntity, int>();
 
 	bool IsDebugEnabled()
 	{
@@ -343,6 +364,58 @@ class CGS_PortalComponent : ScriptComponent
 							{
 								shouldTransfer = true;
 								entryMode = "WALK_ON";
+							}
+						}
+					}
+
+					// Bidirectional wall portal: approaching the entrance should
+					// work even if a wall's collision stops the player before
+					// crossing the portal plane. Unlike proximity-only
+					// teleportation, a deliberate inward movement is required.
+					if (!shouldTransfer && m_bWallEntryAssist && Math.AbsFloat(portalNormal[1]) < 0.6)
+					{
+						float maxApproach = m_fWallEntryDistance;
+						if (maxApproach < 0.4)
+							maxApproach = 0.4;
+						float edgePadding = m_fWallEntryEdgePadding;
+						if (edgePadding < 0)
+							edgePadding = 0;
+
+						float heightOffset = m_fWallEntryHeightOffset;
+						if (heightOffset < 0)
+							heightOffset = 0;
+
+						vector bodyProbe = currentPos + Vector(0, heightOffset, 0);
+						vector previousProbe = previousPos + Vector(0, heightOffset, 0);
+						vector bodyOffset = bodyProbe - portalTransform[3];
+						vector previousBodyOffset = previousProbe - portalTransform[3];
+
+						float bodyDepth = vector.Dot(bodyOffset, portalNormal);
+						float previousBodyDepth = vector.Dot(previousBodyOffset, portalNormal);
+						float bodyRight = vector.Dot(bodyOffset, portalRight);
+						float bodyUp = vector.Dot(bodyOffset, portalUp);
+						bool insideFrame = Math.AbsFloat(bodyRight) <= m_fHalfWidth + edgePadding && Math.AbsFloat(bodyUp) <= m_fHalfHeight + edgePadding;
+
+						float depthMovement = previousBodyDepth - bodyDepth;
+						bool frontApproach = previousBodyDepth > 0.20 && bodyDepth >= -0.35 && bodyDepth <= maxApproach && depthMovement > 0.012;
+						bool backApproach = m_bWallEntryBothSides && previousBodyDepth < -0.20 && bodyDepth >= -maxApproach && bodyDepth <= 0.35 && depthMovement < -0.012;
+						bool shortStep = vector.DistanceSq(previousPos, currentPos) <= m_fCrossingStep * m_fCrossingStep;
+
+						if (insideFrame && shortStep && (frontApproach || backApproach))
+						{
+							shouldTransfer = true;
+							entryMode = "WALL_APPROACH";
+							if (m_bDebug)
+								PrintFormat("[CGS PORTAL WALL] Player=%1 portal=%2 depth=%3 frameRight=%4 frameUp=%5 fromBack=%6", playerId, m_iPortalID, bodyDepth, bodyRight, bodyUp, backApproach);
+						}
+						else if (m_bDebug && bodyDepth < maxApproach + 0.8 && bodyDepth > -maxApproach - 0.8)
+						{
+							int worldMs = GetGame().GetWorld().GetWorldTime();
+							int lastWallDebug;
+							if (!m_mLastWallDebugTimes.Find(character, lastWallDebug) || worldMs - lastWallDebug >= 1500)
+							{
+								m_mLastWallDebugTimes.Set(character, worldMs);
+								PrintFormat("[CGS PORTAL WALL CHECK] ID=%1 depth=%2 frameRight=%3 frameUp=%4 inFrame=%5 inward=%6 backside=%7", m_iPortalID, bodyDepth, bodyRight, bodyUp, insideFrame, frontApproach, backApproach);
 							}
 						}
 					}
