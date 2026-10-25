@@ -615,3 +615,35 @@ I ran the second test after merging PR #17. The camera was created and world-cam
 7. Keep Orange feed disabled until the one-way Blue test is verified. Disable the debug HUD when done.
 
 This is a temporary diagnostic PIP test. The existing functioning portal gun and standard Blue/Orange portal prefabs, all shooting controls, re-entry protection, and teleport logic remain untouched.
+
+## Phase 2.3c — Live camera diagnostic, stale pair guard, and accurate world transforms
+
+### What I saw in my Workbench test
+
+I ran the PiP branch and saw a solid white 128px square in the upper-left corner when approaching the new Blue frame. That square is the optional HUD diagnostic that was added in PR #18, not a model error or a real portal feature. Both the HUD preview and the oval ViewPlane remained white.
+
+My logs confirm these facts in one game session:
+- World initialisation placed the Blue test prefab around `(2215,55,2904)` and the Orange test prefab around `(2251,55,2879)`.
+- The camera/partner log instead reported `partnerPosition=(0,2,0)` and `ScriptCamera` origin `(0,2,0.25)`. This is **not** Orange's expected location; rendering a view at world origin is not meaningful proof that the portal camera works.
+- Both `RTTexture0` and `RenderTarget0` reported positive size, approximately 180x180 physical pixels, so the earlier zero-area hypothesis is no longer sufficient to explain the blank view.
+- The old HUD used `ImageWidget.SetImageTexture(0, RTTexture0)`; a white widget can mean missing/invalid pixels, not necessarily a working camera.
+
+### What I changed in this branch
+
+1. I changed `FindOppositeTest()` to only accept live, not-deleted, same-world portal objects and prefer the nearest opposite-color test portal. This guards against stale instances in Workbench and multiple temporary test pairs.
+2. I changed the remote camera placement to use the opposite portal entity's **GetWorldTransform()[3]** instead of `GetOrigin()`. I also use `SetWorldTransform()` on the spawned `ScriptCamera`.
+3. I log `blueWorld`, `blueGetOrigin`, `orangeWorld`, `orangeGetOrigin` as well as camera world position and partner-world position. That tells me whether the origin mismatch persists.
+4. I replaced the white HUD `ImageWidget` with a **direct RenderTargetWidget** called `PIPDebugCamera`, bound to camera slot 20 via `SetWorld(world, slot)`. This is independent of `$rendertarget`, XOB material mapping, and RTTexture0.
+5. I made this diagnostic **exclusive**: with `m_bDebugHUD=1`, the direct camera renders on the HUD and the in-world portal material is intentionally not fed. With `m_bDebugHUD=0`, the HUD disappears and the render-to-mesh pipeline is enabled. I don't run both passes together, because the historical SVC CCTV mod warned about native renderer crashes when too many targets came up simultaneously.
+6. I made no changes to the working player portal prefabs, blue/orange input, normal gun logic, collision, transfer, or exit-loop protection.
+
+### My next one-way test
+
+1. Pull this branch into my Workbench and compile.
+2. Load one Blue and one Orange `*_PIP_Test.et`; in Blue's component keep `m_bPreviewEnabled=1` and `m_bDebugHUD=1` for stage A. Orange remains `m_bPreviewEnabled=0`.
+3. Start Play. The upper-left area should now be a **direct camera-rendered scene**, not a white `ImageWidget` placeholder. The Blue portal itself should remain white during this HUD-only phase, by design.
+4. Compare `[CGS PORTAL PIP PAIR] blueWorld=... orangeWorld=...` with `[CGS PORTAL PIP CAMERA] ... partnerWorld=...`. If the camera still reports world origin while the editor has the portals at 2200+ coordinates, the partner selection/transform is still wrong.
+5. If the HUD shows Orange's scenery correctly, disable Blue's `m_bDebugHUD` (set to 0), reload Play, and inspect the in-world Blue portal plane. Only then do I investigate XOB material mapping / `$rendertarget` if the screen remains blank.
+6. Never enable Orange's second camera feed until this one-way proof works.
+
+This is still an uncompiled Workbench experiment and should remain a draft PR until the direct HUD camera is verified.

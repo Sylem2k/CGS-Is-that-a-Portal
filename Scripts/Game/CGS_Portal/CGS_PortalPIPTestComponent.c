@@ -48,7 +48,7 @@ class CGS_PortalPIPTestComponent : ScriptComponent
 	[Attribute("1", UIWidgets.CheckBox, "Print one-time PIP state logs")]
 	protected bool m_bDebug;
 
-	[Attribute("1", UIWidgets.CheckBox, "Show temporary 256px camera preview in local HUD. If HUD works but model is blank, check XOB screen material.")]
+	[Attribute("1", UIWidgets.CheckBox, "EXCLUSIVE diagnostic: show DIRECT camera on HUD instead of binding portal mesh. Disable this after HUD works to test the portal material.")]
 	protected bool m_bDebugHUD;
 
 	[Attribute("{6AB25DDA4F038010}UI/Layouts/CGS_PortalPIP_DebugHUD.layout", UIWidgets.ResourceNamePicker, "Temporary independent HUD image to check render target separately from the portal material", "layout")]
@@ -67,7 +67,7 @@ class CGS_PortalPIPTestComponent : ScriptComponent
 	protected RenderTargetWidget m_wView;
 	protected ScriptCamera m_pFeedCamera;
 	protected ref Widget m_wDebugHUD;
-	protected ImageWidget m_wDebugHUDImage;
+	protected RenderTargetWidget m_wDebugDirectCamera;
 	protected bool m_bLoggedNoPartner;
 	protected bool m_bInitialized;
 	protected bool m_bStartScheduled;
@@ -96,34 +96,60 @@ class CGS_PortalPIPTestComponent : ScriptComponent
 			s_aTests.Insert(this);
 
 		if (m_bDebug)
-			PrintFormat("[CGS PORTAL PIP] Registered test portal color=%1 enable=%2 camera=%3", m_pPortal.GetPortalID(), m_bPreviewEnabled, m_iCameraIndex);
+		{
+			vector entityWorld[4];
+			owner.GetWorldTransform(entityWorld);
+			PrintFormat("[CGS PORTAL PIP] Registered test portal color=%1 enable=%2 camera=%3 world=%4 origin=%5", m_pPortal.GetPortalID(), m_bPreviewEnabled, m_iCameraIndex, entityWorld[3], owner.GetOrigin());
+		}
 	}
 
 	//------------------------------------------------------------------------------------------------
-	// This static list intentionally supports a SINGLE world-placed test
-	// pair, not arbitrary per-player portal pairs on a busy multiplayer map.
+	// For one world-placed prototype pair, choose a LIVE opposite-color
+	// portal from this SAME world. Workbench reloads can retain static
+	// component references from previous preview / game sessions. Never
+	// accept another world or a deleted owner as a partner.
 	protected CGS_PortalComponent FindOppositeTest()
 	{
-		if (!m_pPortal)
+		if (!m_pPortal || !GetOwner())
 			return null;
+
+		BaseWorld currentWorld = GetOwner().GetWorld();
+		vector ourWorld[4];
+		GetOwner().GetWorldTransform(ourWorld);
+
+		CGS_PortalComponent closest;
+		float closestDistance = 1000000000.0;
 
 		foreach (CGS_PortalPIPTestComponent candidate : s_aTests)
 		{
-			if (!candidate || candidate == this || !candidate.GetOwner())
+			if (!candidate || candidate == this)
+				continue;
+
+			IEntity otherEntity = candidate.GetOwner();
+			if (!otherEntity || otherEntity.IsDeleted())
+				continue;
+
+			if (otherEntity.GetWorld() != currentWorld)
 				continue;
 
 			CGS_PortalComponent other = candidate.m_pPortal;
 			if (!other || other.GetPortalID() == m_pPortal.GetPortalID())
 				continue;
 
-			// In the first static-world test, both owner IDs are 0.
 			if (other.GetPortalOwnerID() != m_pPortal.GetPortalOwnerID())
 				continue;
 
-			return other;
+			vector otherWorld[4];
+			otherEntity.GetWorldTransform(otherWorld);
+			float distance = vector.Distance(ourWorld[3], otherWorld[3]);
+			if (!closest || distance < closestDistance)
+			{
+				closest = other;
+				closestDistance = distance;
+			}
 		}
 
-		return null;
+		return closest;
 	}
 
 	//------------------------------------------------------------------------------------------------
@@ -202,13 +228,21 @@ class CGS_PortalPIPTestComponent : ScriptComponent
 			return false;
 		}
 
-		// Preserve the known working CCTV/weapon scope order:
-		// camera -> widget layout -> SetWorld -> scale -> SetRenderTarget.
-		m_wView.SetWorld(world, m_iCameraIndex);
-
+		// Step A: direct-HUD diagnostic. Render the camera on ONLY ONE
+		// RenderTargetWidget, not both the HUD and mesh at once.
+		// The old CCTV author warned about native rendering crashes
+		// when too many targets were active simultaneously.
+		// Step B: disable m_bDebugHUD to bind the world view to the
+		// portal mesh material once the direct camera is proven.
 		float scale = Math.Clamp(m_fResolutionScale, 0.2, 1.0);
 		m_wView.SetResolutionScale(scale, scale);
-		m_wView.SetVisible(true);
+		if (m_bDebugHUD)
+			m_wView.SetVisible(false);
+		else
+		{
+			m_wView.SetWorld(world, m_iCameraIndex);
+			m_wView.SetVisible(true);
+		}
 
 		int fps = m_iMaxFPS;
 		if (fps < 1)
@@ -218,28 +252,43 @@ class CGS_PortalPIPTestComponent : ScriptComponent
 		m_wView.SetMaxFPS(fps);
 		m_wView.SetRefresh(1, 0);
 
-		// Material on ONLY the new frame's view plane contains:
-		//    BCRMap "$rendertarget"
-		m_wRTTexture.SetRenderTarget(GetOwner());
+		// Mesh pipeline and diagnostic HUD are intentionally mutually
+		// exclusive until one has proven live world pixels.
+		// To test the plane material, disable m_bDebugHUD in the
+		// Blue_Portal_PIP_Test.et component in Workbench.
+		if (!m_bDebugHUD)
+		{
+			m_wRTTexture.SetRenderTarget(GetOwner());
+			Print("[CGS PORTAL PIP MESH] Render target bound to ViewPlane. Camera diagnostic HUD disabled.");
+		}
+		else
+		{
+			Print("[CGS PORTAL PIP HUD] EXCLUSIVE diagnostic mode. In-world portal plane is intentionally NOT receiving a camera feed in this test.");
+		}
 
-		// The HUD preview samples the SAME RTTextureWidget through a
-		// standard ImageWidget API. It bypasses the model's $rendertarget
-		// material. This makes camera/layout failures distinguishable from
-		// incorrect material assignments or invisible ViewPlane geometry.
+		// Previous HUD used ImageWidget.SetImageTexture() and only drew
+		// a white rectangle. That is ambiguous: the image may be invalid
+		// despite the world camera rendering. This diagnostic uses a
+		// separate RenderTargetWidget which draws the world camera DIRECTLY.
+		// It bypasses RTTexture0 and the mesh material entirely.
 		if (m_bDebugHUD)
 		{
 			m_wDebugHUD = GetGame().GetWorkspace().CreateWidgets(m_sDebugHUDLayout);
 			if (m_wDebugHUD)
 			{
-				m_wDebugHUDImage = ImageWidget.Cast(m_wDebugHUD.FindAnyWidget("PIPDebugImage"));
-				if (m_wDebugHUDImage)
+				m_wDebugDirectCamera = RenderTargetWidget.Cast(m_wDebugHUD.FindAnyWidget("PIPDebugCamera"));
+				if (m_wDebugDirectCamera)
 				{
-					m_wDebugHUDImage.SetImageTexture(0, m_wRTTexture);
-					Print("[CGS PORTAL PIP HUD] Local preview created. Top left image = camera feed independent of mesh. If this works but portal stays blank, check the XOB screen material.");
+					m_wDebugDirectCamera.SetWorld(world, m_iCameraIndex);
+					m_wDebugDirectCamera.SetResolutionScale(scale, scale);
+					m_wDebugDirectCamera.SetMaxFPS(fps);
+					m_wDebugDirectCamera.SetRefresh(1, 0);
+					m_wDebugDirectCamera.SetVisible(true);
+					Print("[CGS PORTAL PIP HUD] DIRECT world-camera widget created; top-left preview now bypasses RTTexture0 and the portal material.");
 				}
 				else
 				{
-					Print("[CGS PORTAL PIP HUD] WARNING: PIPDebugImage not found in diagnostic HUD layout.");
+					Print("[CGS PORTAL PIP HUD] WARNING: PIPDebugCamera not found in diagnostic HUD layout.");
 				}
 			}
 			else
@@ -254,7 +303,12 @@ class CGS_PortalPIPTestComponent : ScriptComponent
 		{
 			vector lens[4];
 			m_pFeedCamera.GetTransform(lens);
-			PrintFormat("[CGS PORTAL PIP CAMERA] ScriptCamera CREATED slot=%1 origin=%2 forward=%3 partnerPosition=%4", m_iCameraIndex, lens[3], lens[2], m_pPartner.GetOwner().GetOrigin());
+			vector blueWorld[4];
+			vector orangeWorld[4];
+			GetOwner().GetWorldTransform(blueWorld);
+			m_pPartner.GetOwner().GetWorldTransform(orangeWorld);
+			PrintFormat("[CGS PORTAL PIP PAIR] blueWorld=%1 blueGetOrigin=%2 orangeWorld=%3 orangeGetOrigin=%4", blueWorld[3], GetOwner().GetOrigin(), orangeWorld[3], m_pPartner.GetOwner().GetOrigin());
+			PrintFormat("[CGS PORTAL PIP CAMERA] ScriptCamera CREATED slot=%1 worldOrigin=%2 forward=%3 partnerWorld=%4", m_iCameraIndex, lens[3], lens[2], orangeWorld[3]);
 
 			vector remoteForward = lens[2];
 			if (Math.AbsFloat(remoteForward[1]) >= 0.85)
@@ -262,8 +316,13 @@ class CGS_PortalPIPTestComponent : ScriptComponent
 			else
 				Print("[CGS PORTAL PIP CAMERA] Camera aimed toward scenery (not vertical).");
 
-			PrintFormat("[CGS PORTAL PIP] LIVE test feed bound: color=%1 camera=%2 partner=%3 fps=%4 scale=%5", m_pPortal.GetPortalID(), m_iCameraIndex, m_pPartner.GetPortalID(), fps, scale);
-			Print("[CGS PORTAL PIP MATERIAL] If view remains blank, check *_ViewPlane material resolves to CGS_Portal_PIP_Screen_TEST.emat (BCRMap $rendertarget); reimport frame .xob.");
+			if (m_bDebugHUD)
+				PrintFormat("[CGS PORTAL PIP] DIRECT HUD camera active: color=%1 camera=%2 partner=%3 fps=%4 scale=%5", m_pPortal.GetPortalID(), m_iCameraIndex, m_pPartner.GetPortalID(), fps, scale);
+			else
+			{
+				PrintFormat("[CGS PORTAL PIP] LIVE mesh feed bound: color=%1 camera=%2 partner=%3 fps=%4 scale=%5", m_pPortal.GetPortalID(), m_iCameraIndex, m_pPartner.GetPortalID(), fps, scale);
+				Print("[CGS PORTAL PIP MATERIAL] If view remains blank, check *_ViewPlane material resolves to CGS_Portal_PIP_Screen_TEST.emat (BCRMap $rendertarget); reimport frame .xob.");
+			}
 		}
 		return true;
 	}
@@ -281,13 +340,15 @@ class CGS_PortalPIPTestComponent : ScriptComponent
 	//------------------------------------------------------------------------------------------------
 	protected void DestroyPreview()
 	{
-		// Remove the independent HUD preview first so nothing continues
-		// sampling RTTexture0 during shutdown / Workbench reload.
+		// Release the independent direct world-camera view first.
+		if (m_wDebugDirectCamera)
+			m_wDebugDirectCamera.SetWorld(null, m_iCameraIndex);
+
 		if (m_wDebugHUD)
 			m_wDebugHUD.RemoveFromHierarchy();
 
 		m_wDebugHUD = null;
-		m_wDebugHUDImage = null;
+		m_wDebugDirectCamera = null;
 
 		// Then unbind the mesh material before removing the render-target
 		// layout and ScriptCamera (native render thread owns these refs).
@@ -358,11 +419,13 @@ class CGS_PortalPIPTestComponent : ScriptComponent
 			outset = 0.15;
 		if (outset > 1)
 			outset = 1;
-		cam[3] = m_pPartner.GetOwner().GetOrigin() + normal * outset;
+		vector partnerWorld[4];
+		m_pPartner.GetOwner().GetWorldTransform(partnerWorld);
+		cam[3] = partnerWorld[3] + normal * outset;
 
 		if (m_pFeedCamera)
 		{
-			m_pFeedCamera.SetTransform(cam);
+			m_pFeedCamera.SetWorldTransform(cam);
 			m_pFeedCamera.FreeFly = false;
 		}
 		GetOwner().GetWorld().SetCameraEx(m_iCameraIndex, cam);
@@ -411,7 +474,9 @@ class CGS_PortalPIPTestComponent : ScriptComponent
 				{
 					vector actual[4];
 					owner.GetWorld().GetCamera(m_iCameraIndex, actual);
-					PrintFormat("[CGS PORTAL PIP CAMERA] World camera READBACK slot=%1 origin=%2 forward=%3 partnerPosition=%4", m_iCameraIndex, actual[3], actual[2], m_pPartner.GetOwner().GetOrigin());
+					vector currentPartnerWorld[4];
+					m_pPartner.GetOwner().GetWorldTransform(currentPartnerWorld);
+					PrintFormat("[CGS PORTAL PIP CAMERA] World camera READBACK slot=%1 origin=%2 forward=%3 partnerWorld=%4", m_iCameraIndex, actual[3], actual[2], currentPartnerWorld[3]);
 					float outerW;
 					float outerH;
 					float innerW;
@@ -419,6 +484,13 @@ class CGS_PortalPIPTestComponent : ScriptComponent
 					m_wRTTexture.GetScreenSize(outerW, outerH);
 					m_wView.GetScreenSize(innerW, innerH);
 					PrintFormat("[CGS PORTAL PIP LAYOUT] RTTexture0=%1x%2 pixels RenderTarget0=%3x%4 pixels (target >0 in both dimensions)", outerW, outerH, innerW, innerH);
+					if (m_wDebugDirectCamera)
+					{
+						float hudWidth;
+						float hudHeight;
+						m_wDebugDirectCamera.GetScreenSize(hudWidth, hudHeight);
+						PrintFormat("[CGS PORTAL PIP HUD] DirectCamera=%1x%2 pixels; independently rendering world slot %3", hudWidth, hudHeight, m_iCameraIndex);
+					}
 				}
 			}
 			return;
