@@ -1,23 +1,27 @@
-// TEMPORARY LOCAL DEBUG OVERLAY, enabled on Blue test component only.
-// If this HUD image shows Orange's camera but the blue in-world plane
-// stays blank, the error is the frame's screen material / XOB mapping.
-// If both HUD and plane are blank, inspect camera and render-target logs.
+// CGS PORTAL PIP diagnostic overlay: DIRECT world-camera renderer.
+// Unlike the previous ImageWidget version, this RenderTargetWidget draws
+// camera slot N directly. It does not sample RTTexture0 or $rendertarget.
+// Therefore a working HUD view with blank portal isolates a material or
+// render-to-mesh binding failure.
+//
+// Only enabled in Blue_Portal_PIP_Test.et. Remove once camera is verified.
 FrameWidgetClass {
  Name "rootFrame"
  {
-  ImageWidgetClass "{6AB25DDA4F038011}" {
-   Name "PIPDebugImage"
+  RenderTargetWidgetClass "{6AB25DDA4F038011}" {
+   Name "PIPDebugCamera"
    Slot FrameWidgetSlot "{6AB25DDA4F038012}" {
     PositionX 24
     OffsetLeft 24
     PositionY 80
     OffsetTop 80
-    SizeX 256
-    OffsetRight -280
-    SizeY 256
-    OffsetBottom -336
+    SizeX 384
+    OffsetRight -408
+    SizeY 384
+    OffsetBottom -464
    }
-   Color 1 1 1 1
+   camera 20
+   "max FPS" 12
   }
  }
 }
