@@ -1,0 +1,38 @@
+// Single feed, single camera, one 512px render target.
+// Based on the same RTTextureWidget/RenderTargetWidget hierarchy as
+// Reforger's PIP optics and the supplied old CCTV monitor.
+//
+// The inner RenderTarget0 renders camera N. The outer RTTexture0 exposes
+// this image to mesh materials using BCRMap "$rendertarget".
+FrameWidgetClass {
+ Name "rootFrame"
+ {
+  RTTextureWidgetClass "{6AB25DDA4F028001}" {
+   Name "RTTexture0"
+   Slot FrameWidgetSlot "{6AB25DDA4F028002}" {
+    OffsetLeft 0
+    OffsetTop 0
+    SizeX 512
+    OffsetRight -512
+    SizeY 512
+    OffsetBottom -512
+   }
+   {
+    RenderTargetWidgetClass "{6AB25DDA4F028003}" {
+     Name "RenderTarget0"
+     Slot FrameWidgetSlot "{6AB25DDA4F028004}" {
+      Anchor 0 0 1 1
+      PositionX 0
+      OffsetLeft 0
+      PositionY 0
+      OffsetTop 0
+      SizeX -512
+      OffsetRight 0
+      SizeY -512
+      OffsetBottom 0
+     }
+    }
+   }
+  }
+ }
+}
