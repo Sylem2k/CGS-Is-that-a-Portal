@@ -414,3 +414,26 @@ Only `Prefabs/Weapons/Core/Portal_Gun_.et` is changed:
 6. If Orange input stops working after ADS was disabled, the next step is **a dedicated custom secondary input action**, rather than re-enabling the broken ADS camera.
 
 This fix has not been tested in Workbench from ChatGPT. No changes were made to existing portal travel/return detection, ownership maps, or momentum code.
+
+
+## Phase 2.1c — Orange right-click has a dedicated input (Blue unchanged)
+
+**Branch:** `feature/portal-gun-dedicated-input` — **Workbench compilation and runtime verification pending**.
+
+Player report: **Blue already fires successfully on LMB**, but **RMB still starts vanilla ADS instead of shooting Orange**. The previous script polled `CharacterWeaponADS` to request Orange, causing the conflict.
+
+This patch preserves the working Blue path: `GetActionValue("CharacterFire")` and its owner-bound server RPC remain unchanged. Only Orange's source changes:
+
+- Adds `Configs/System/chimeraInputCommon.conf` and matching `.meta`.
+- Declares `CGSPortalGunOrange` bound to **`mouse:button1` (RMB)** and `gamepad0:left_trigger`.
+- Declares `CGSPortalGunContext`, priority **10100**, and enables it each frame **only while the CGS Portal Gun is held and no menu is open**. This is intended to take the right mouse button from the normal ADS action in that state.
+- `CGS_PortalPlayerController.c` now polls `CGSPortalGunOrange` rather than `CharacterWeaponADS`. It also prints exactly one diagnostic on equipping: `[CGS GUN INPUT] Orange action registered=... contextActivated=...`.
+- Input latches ensure one mouse click places only one portal. Other weapons do not activate the custom context.
+- Existing portal gun mesh, pistol holding/holstering, muzzle camera fix, portal physics, personal portal pairs and prefab GUIDs are untouched.
+
+**Test:** Pull the branch, compile/reload, equip portal gun. Read the single registration line. Left-click a wall: Blue must still spawn. Right-click a different wall: Orange should spawn instead of ADS and emit:
+`[CGS GUN INPUT] Player=1 requested color=1`, `[CGS GUN RPC] Server received player=1 color=1`, `[CGS GUN] Player=1 fired color=1 ...`.
+
+If Orange still ADS, supply the registration/context line. If it reports `registered=0`, the input resource is not being merged and Workbench must import/reload the `.conf`; if it reports `registered=1` but never requests `color=1`, the context/action is not receiving RMB. If it requests `color=1` but no portal appears, check `[CGS GUN]` placement rejections.
+
+**Limitation:** This is the first attempt at a high-priority custom input context, not confirmed yet to suppress every version of vanilla ADS. No global ADS or input behavior is changed for other weapons.
