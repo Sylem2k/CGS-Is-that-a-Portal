@@ -9,10 +9,28 @@ GenericEntity {
    DistanceManagement 0
   }
   MeshObject "{6AB21D161F2E70B1}" {
+   Object "{A4EB7B72BC9B1048}Common/Models/Portal_Gun.xob"
    InheritVisibility 1
+  }
+  RigidBody "{6AB21D161F2E7338}" {
+   Mass 1.5
+   ModelGeometry 1
   }
   SCR_WeaponAttachmentsStorageComponent "{6AB21D161F2E70B7}" {
    Attributes SCR_ItemAttributeCollection "{6AB21D161F2E70BA}" {
+    ItemDisplayName WeaponUIInfo "{6AB21D161F2E7341}" {
+     Name "CGS Portal Gun"
+     Description "Experimental portal device. Blue and Orange portals will be controlled by custom firing actions."
+    }
+    ItemPhysAttributes ItemPhysicalAttributes "{6AB21D161F2E7342}" {
+     Weight 1.5
+     SizeSetupStrategy Volume
+     ItemVolume 450
+    }
+    ItemAnimationAttributes ItemAnimationAttributes "{6AB21D161F2E7343}" {
+     AnimationInstance "{41AABAE44257A657}anims/workspaces/player/player_main_pistol.asi"
+     AnimationIKPose "{6AAD163C7072AF0F}Assets/Weapons/Handguns/M9/anims/anm/p_m9_ik.anm"
+    }
     CustomAttributes {
      AimingModifierAttributes "{6AB21D161F2E70B9}" {
       ErectLimitsHorizontal -90 90
@@ -30,20 +48,6 @@ GenericEntity {
       TargetVelocitySteepness 3
       TargetVelocityLimit 3.6
      }
-     SCR_RecoilCameraShakeParams "{6AB21D161F2E7080}" {
-      m_fBlendOutTime 0.089
-      m_fMaxVelocity 15
-      m_vTranslationMin 0.004 0.004 0
-      m_vTranslationMax 0.005 0.005 0
-      m_fFOVModifier 0.985
-      m_vRotationImpulseMin 0.005 0.005 7
-      m_vRotationImpulseMax 0.012 0.012 8
-      m_fMinImpulseThreshold 0.01
-      m_fImpulseCrouchMagnitudeModifier 0.7
-      m_fImpulseProneMagnitudeModifier 1
-      m_fCrouchMagnitudeModifier 0.5
-      m_fProneMagnitudeModifier 0.33
-     }
     }
     m_SlotType SLOT_WEAPONS_STORAGE
    }
@@ -53,7 +57,7 @@ GenericEntity {
    components {
     SightsComponent "{6AB21D161F2E7089}" {
      SightsPosition PointInfo "{6AB21D161F2E708F}" {
-      PivotID "eye"
+      Offset 0 0 0
      }
     }
     WeaponAnimationComponent "{6AB21D161F2E7092}" {
@@ -66,11 +70,12 @@ GenericEntity {
    }
    obstructionTestBBScale 0.2 0.1 0.05
    sightsCameraRollScaler -1
+   WeaponType Handgun
    UIInfo WeaponUIInfo "{6AB21D161F2E70E9}" {
-    m_MagIndicator SCR_MagazineIndicatorConfiguration "{565ECA2FE3F0F3FB}" : "{7C114BA7C59E198D}Configs/WeaponInfo/MagazineIndicators/box.conf" {
-    }
+    Name "CGS Portal Gun"
+    Description "Personal dual-portal placement device"
    }
-   WeaponSlotType "primary"
+   WeaponSlotType "secondary"
   }
   ActionsManagerComponent "{6AB21D161F2E70F2}" {
    ActionContexts {
@@ -78,26 +83,6 @@ GenericEntity {
      ContextName "default"
      Position PointInfo "{6AB21D161F2E70F6}" {
      }
-    }
-    UserActionContext "{6AB21D161F2E70F7}" {
-     UIInfo SCR_ActionContextUIInfo "{608488A963951E31}" : "{970293F8561231D4}Configs/UI/NearbyInteractionContext/NearbyContextWeapons.conf" {
-     }
-     ContextName "bipod"
-     Position PointInfo "{6AB21D161F2E70F5}" {
-     }
-     Radius 0.05
-    }
-    UserActionContext "{6AB21D161F2E70FA}" {
-     UIInfo SCR_ActionContextUIInfo "{608488A95953A22A}" : "{970293F8561231D4}Configs/UI/NearbyInteractionContext/NearbyContextWeapons.conf" {
-     }
-     ContextName "magazine"
-     Radius 0.1
-    }
-    UserActionContext "{6AB21D161F2E70F8}" {
-     UIInfo SCR_ActionContextUIInfo "{608488A95BEC69AC}" : "{970293F8561231D4}Configs/UI/NearbyInteractionContext/NearbyContextWeapons.conf" {
-     }
-     ContextName "firemode"
-     Radius 0.1
     }
    }
    additionalActions {
@@ -130,60 +115,6 @@ GenericEntity {
      }
      "Sort Priority" 2
     }
-    SCR_WeaponAction "{6AB21D161F2E70CC}" {
-     ParentContextList {
-      "bipod"
-     }
-     UIInfo SCR_ActionUIInfo "{6AB21D161F2E70CD}" {
-      Name "Bipod"
-      m_sIconName "bipod"
-     }
-     m_WeaponActionType Bipod
-    }
-    SCR_ToggleSafetyUserAction "{6AB21D161F2E70D3}" {
-     ParentContextList {
-      "firemode"
-     }
-     UIInfo SCR_ActionUIInfo "{6AB21D161F2E70D1}" {
-      Name "#AR-Keybind_WeaponSafety"
-      m_sIconName "not-available"
-     }
-    }
-    SCR_DetachMagazineUserAction "{6AB21D161F2E70D5}" {
-     ParentContextList {
-      "magazine"
-     }
-     UIInfo SCR_ActionUIInfo "{6AB21D161F2E70DA}" {
-      Name "#AR-UserAction_Detach"
-      m_sIconName "magazine"
-     }
-    }
-    SCR_FireModeSwitchUserAction "{6AB21D161F2E70DB}" {
-     ParentContextList {
-      "firemode"
-     }
-     UIInfo SCR_ActionUIInfo "{6AB21D161F2E70D9}" {
-      Name "#AR-ControlsHint_NextFireMode"
-      m_sIconName "availability-full"
-     }
-    }
-   }
-  }
-  WeaponGamepadEffectsManagerComponent "{6AB21D161F2E70DF}" {
-   EffectContexts {
-    GamepadEffectContext "{6AB21D161F2E70DD}" {
-     Name "Weapon"
-    }
-   }
-   "Default Chambered Trigger effect" GamepadTriggerEffect "{61D30BF7F0381163}" : "{18523135C9051B39}Prefabs/Weapons/Core/Configs/TriggerEffects/Charged/TriggerEffect_Charged.conf" {
-   }
-   "Default ADS Trigger effect" GamepadTriggerEffect "{61B129618F212411}" : "{7194991724224602}Prefabs/Weapons/Core/Configs/TriggerEffects/ADS/TriggerEffect_ADS.conf" {
-   }
-   "Default Deployment effect" GamepadTriggerEffect "{61C377CC2932DEB0}" : "{B304BE7D80CD076F}Prefabs/Weapons/Core/Configs/TriggerEffects/ADS/TriggerEffect_ADSDeployed.conf" {
-   }
-   "Default Empty Fire Trigger effect" GamepadTriggerEffect "{61B12961A9A552E1}" : "{0F3D24E63B0AFAF7}Prefabs/Weapons/Core/Configs/TriggerEffects/Empty/TriggerEffect_Empty.conf" {
-   }
-   "Default Firing Trigger effect" GamepadTriggerEffect "{61D30BF7F81F8C61}" : "{9BC0B370BB78C4E9}Prefabs/Weapons/Core/Configs/TriggerEffects/Fire/TriggerEffect_Fire.conf" {
    }
   }
   NwkPhysicsMovementComponent "{6AB21D161F2E7321}" {
