@@ -48,7 +48,7 @@ class CGS_PortalPIPTestComponent : ScriptComponent
 	[Attribute("1", UIWidgets.CheckBox, "Print one-time PIP state logs")]
 	protected bool m_bDebug;
 
-	[Attribute("1", UIWidgets.CheckBox, "Show temporary 256px camera preview in local HUD. If HUD works but model is blank, check XOB screen material.")]
+	[Attribute("1", UIWidgets.CheckBox, "EXCLUSIVE diagnostic: show DIRECT camera on HUD instead of binding portal mesh. Disable this after HUD works to test the portal material.")]
 	protected bool m_bDebugHUD;
 
 	[Attribute("{6AB25DDA4F038010}UI/Layouts/CGS_PortalPIP_DebugHUD.layout", UIWidgets.ResourceNamePicker, "Temporary independent HUD image to check render target separately from the portal material", "layout")]
@@ -96,7 +96,11 @@ class CGS_PortalPIPTestComponent : ScriptComponent
 			s_aTests.Insert(this);
 
 		if (m_bDebug)
-			PrintFormat("[CGS PORTAL PIP] Registered test portal color=%1 enable=%2 camera=%3", m_pPortal.GetPortalID(), m_bPreviewEnabled, m_iCameraIndex);
+		{
+			vector entityWorld[4];
+			owner.GetWorldTransform(entityWorld);
+			PrintFormat("[CGS PORTAL PIP] Registered test portal color=%1 enable=%2 camera=%3 world=%4 origin=%5", m_pPortal.GetPortalID(), m_bPreviewEnabled, m_iCameraIndex, entityWorld[3], owner.GetOrigin());
+		}
 	}
 
 	//------------------------------------------------------------------------------------------------
@@ -224,13 +228,21 @@ class CGS_PortalPIPTestComponent : ScriptComponent
 			return false;
 		}
 
-		// Preserve the known working CCTV/weapon scope order:
-		// camera -> widget layout -> SetWorld -> scale -> SetRenderTarget.
-		m_wView.SetWorld(world, m_iCameraIndex);
-
+		// Step A: direct-HUD diagnostic. Render the camera on ONLY ONE
+		// RenderTargetWidget, not both the HUD and mesh at once.
+		// The old CCTV author warned about native rendering crashes
+		// when too many targets were active simultaneously.
+		// Step B: disable m_bDebugHUD to bind the world view to the
+		// portal mesh material once the direct camera is proven.
 		float scale = Math.Clamp(m_fResolutionScale, 0.2, 1.0);
 		m_wView.SetResolutionScale(scale, scale);
-		m_wView.SetVisible(true);
+		if (m_bDebugHUD)
+			m_wView.SetVisible(false);
+		else
+		{
+			m_wView.SetWorld(world, m_iCameraIndex);
+			m_wView.SetVisible(true);
+		}
 
 		int fps = m_iMaxFPS;
 		if (fps < 1)
@@ -240,9 +252,19 @@ class CGS_PortalPIPTestComponent : ScriptComponent
 		m_wView.SetMaxFPS(fps);
 		m_wView.SetRefresh(1, 0);
 
-		// Material on ONLY the new frame's view plane contains:
-		//    BCRMap "$rendertarget"
-		m_wRTTexture.SetRenderTarget(GetOwner());
+		// Mesh pipeline and diagnostic HUD are intentionally mutually
+		// exclusive until one has proven live world pixels.
+		// To test the plane material, disable m_bDebugHUD in the
+		// Blue_Portal_PIP_Test.et component in Workbench.
+		if (!m_bDebugHUD)
+		{
+			m_wRTTexture.SetRenderTarget(GetOwner());
+			Print("[CGS PORTAL PIP MESH] Render target bound to ViewPlane. Camera diagnostic HUD disabled.");
+		}
+		else
+		{
+			Print("[CGS PORTAL PIP HUD] EXCLUSIVE diagnostic mode. In-world portal plane is intentionally NOT receiving a camera feed in this test.");
+		}
 
 		// Previous HUD used ImageWidget.SetImageTexture() and only drew
 		// a white rectangle. That is ambiguous: the image may be invalid
@@ -294,8 +316,13 @@ class CGS_PortalPIPTestComponent : ScriptComponent
 			else
 				Print("[CGS PORTAL PIP CAMERA] Camera aimed toward scenery (not vertical).");
 
-			PrintFormat("[CGS PORTAL PIP] LIVE test feed bound: color=%1 camera=%2 partner=%3 fps=%4 scale=%5", m_pPortal.GetPortalID(), m_iCameraIndex, m_pPartner.GetPortalID(), fps, scale);
-			Print("[CGS PORTAL PIP MATERIAL] If view remains blank, check *_ViewPlane material resolves to CGS_Portal_PIP_Screen_TEST.emat (BCRMap $rendertarget); reimport frame .xob.");
+			if (m_bDebugHUD)
+				PrintFormat("[CGS PORTAL PIP] DIRECT HUD camera active: color=%1 camera=%2 partner=%3 fps=%4 scale=%5", m_pPortal.GetPortalID(), m_iCameraIndex, m_pPartner.GetPortalID(), fps, scale);
+			else
+			{
+				PrintFormat("[CGS PORTAL PIP] LIVE mesh feed bound: color=%1 camera=%2 partner=%3 fps=%4 scale=%5", m_pPortal.GetPortalID(), m_iCameraIndex, m_pPartner.GetPortalID(), fps, scale);
+				Print("[CGS PORTAL PIP MATERIAL] If view remains blank, check *_ViewPlane material resolves to CGS_Portal_PIP_Screen_TEST.emat (BCRMap $rendertarget); reimport frame .xob.");
+			}
 		}
 		return true;
 	}
