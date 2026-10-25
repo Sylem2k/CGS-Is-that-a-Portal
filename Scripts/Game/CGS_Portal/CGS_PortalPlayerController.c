@@ -143,10 +143,9 @@ modded class SCR_PlayerController
 		RpcDo_CGSPinkTarget(characterID);
 	}
 
-	// PINKIFIER - TEST IDENTITY-MANAGED PINK HEAD VARIANT.
-	// White_04 receives an inherited, prefab-defined PINK head.
-	// Other known head models remain vanilla camo as a control group.
-	// Never calls SetMaterial on a head or attached equipment.
+	// PINKIFIER - PINK SKIN HEAD TEST (ASIAN_02 AND WHITE_04).
+	// Both heads have prefab-assigned pink materials; no live head remaps.
+	// Unsupported heads remain unchanged instead of turning camouflage.
 	[RplRpc(RplChannel.Reliable, RplRcver.Broadcast)]
 	protected void RpcDo_CGSPinkTarget(RplId characterID)
 	{
@@ -179,92 +178,72 @@ modded class SCR_PlayerController
 		// experiment follows existing Reforger facepaint implementations.
 		// It never remaps the live head mesh.
 		if (Replication.IsServer())
-			CGS_TrySetVanillaCamoHead(character);
+			CGS_TrySetPinkIdentityHead(character);
 
 		// Preserve the already-tested non-recursive root body skin tint.
 		SCR_Global.SetMaterial(character, pinkMaterial, false);
-		PrintFormat("[CGS PINKIFIER IDENTITY TEST] Target=%1 bodyPink=1 attachedMeshRemaps=0", character);
+		PrintFormat("[CGS PINKIFIER PINK HEAD TEST] Target=%1 bodyPink=1 liveHeadMaterialChanges=0", character);
 	}
 
-	// Identity test: replace the assigned head prefab through the
-	// supported identity component, NOT by replacing a VObject.
-	// Head camouflage is deliberately used as a compatibility test.
-	protected void CGS_TrySetVanillaCamoHead(ChimeraCharacter character)
+	// Use Reforger's identity system to instantiate an appearance prefab
+	// with skin materials assigned BEFORE the head is attached.
+	// Never call SCR_Global.SetMaterial() on the live head entity.
+	protected void CGS_TrySetPinkIdentityHead(ChimeraCharacter character)
 	{
 		SCR_CharacterIdentityComponent identityComponent = SCR_CharacterIdentityComponent.Cast(character.FindComponent(SCR_CharacterIdentityComponent));
 		if (!identityComponent || !identityComponent.GetIdentity())
 		{
-			Print("[CGS PINKIFIER IDENTITY TEST] Character has no usable identity component.", LogLevel.WARNING);
+			Print("[CGS PINKIFIER PINK HEAD TEST] No character identity component.", LogLevel.WARNING);
 			return;
 		}
 
 		VisualIdentity visualIdentity = identityComponent.GetIdentity().GetVisualIdentity();
 		if (!visualIdentity)
 		{
-			Print("[CGS PINKIFIER IDENTITY TEST] Character has no visual identity.", LogLevel.WARNING);
+			Print("[CGS PINKIFIER PINK HEAD TEST] No visual identity.", LogLevel.WARNING);
 			return;
 		}
 
 		ResourceName currentHead = visualIdentity.GetHead();
 		if (!currentHead)
 		{
-			Print("[CGS PINKIFIER IDENTITY TEST] Current head prefab is empty.", LogLevel.WARNING);
+			Print("[CGS PINKIFIER PINK HEAD TEST] Current head is empty.", LogLevel.WARNING);
 			return;
 		}
 
-		// Avoid repeated swap on subsequent shots.
-		if (currentHead.Contains("_camo_") || currentHead.Contains("CGS_Head_White_04_Pink"))
+		// Shots after successful pinkifying are idempotent.
+		if (currentHead.Contains("CGS_Head_Asian_02_Pink") || currentHead.Contains("CGS_Head_White_04_Pink"))
 		{
-			PrintFormat("[CGS PINKIFIER IDENTITY TEST] Existing camo head already assigned=%1", currentHead);
+			PrintFormat("[CGS PINKIFIER PINK HEAD TEST] Already pink: %1", currentHead);
 			return;
 		}
 
-		ResourceName newHead = CGS_GetVanillaTestCamo(currentHead);
+		// Supports vanilla and camouflaged versions of supported heads.
+		ResourceName newHead = CGS_GetPinkHeadPrefab(currentHead);
 		if (!newHead)
 		{
-			PrintFormat("[CGS PINKIFIER IDENTITY TEST] No vanilla camo mapping for head=%1", currentHead);
+			// Do not substitute vanilla camouflage: it obscures the
+			// pink-head result and confused the previous Workbench test.
+			PrintFormat("[CGS PINKIFIER PINK HEAD TEST] Unmapped head, unchanged: %1", currentHead);
 			return;
 		}
 
 		visualIdentity.SetHead(newHead);
 		identityComponent.CommitChanges();
 		identityComponent.SetIdentity(identityComponent.GetIdentity());
-		PrintFormat("[CGS PINKIFIER IDENTITY TEST] Head changed through VisualIdentity: old=%1 new=%2", currentHead, newHead);
+		PrintFormat("[CGS PINKIFIER PINK HEAD TEST] Identity swapped old=%1 new=%2", currentHead, newHead);
 	}
 
-	// White_04 uses a CGS prefab with pink material assignments.
-	// All other head types retain their known-good vanilla camo tests.
-	protected ResourceName CGS_GetVanillaTestCamo(ResourceName currentHead)
+	// Deliberately narrow test scope. Expand to other skin/head types
+	// only after Workbench confirms these inherited prefabs render
+	// and animate correctly with no visible displacement.
+	protected ResourceName CGS_GetPinkHeadPrefab(ResourceName currentHead)
 	{
 		if (currentHead.Contains("Head_Asian_02"))
-			return "{FF94E9F1DAB8496C}Prefabs/Characters/Heads/Head_Asian_02/Head_Asian_02_camo_US_01.et";
-
-		if (currentHead.Contains("Head_Black_02"))
-			return "{33850F6F8AC1FC61}Prefabs/Characters/Heads/Head_Black_02/Head_Black_02_camo_US_01.et";
-
-		if (currentHead.Contains("Head_White_02"))
-			return "{43AA5BDFE4338F57}Prefabs/Characters/Heads/Head_White_02/Head_White_02_camo_US_01.et";
-
-		if (currentHead.Contains("Head_White_03"))
-			return "{51636CA07EC51127}Prefabs/Characters/Heads/Head_White_03/Head_White_03_camo_US_01.et";
+			return "{6AB2F1A000000430}Prefabs/Characters/Heads/CGS_Head_Asian_02_Pink.et";
 
 		if (currentHead.Contains("Head_White_04"))
 			return "{6AB2F1A000000420}Prefabs/Characters/Heads/CGS_Head_White_04_Pink.et";
-
-		if (currentHead.Contains("Head_White_05"))
-			return "{36B119F39289239E}Prefabs/Characters/Heads/Head_White_05/Head_White_05_camo_US_01.et";
-
-		if (currentHead.Contains("Head_White_06"))
-			return "{A42053AFB05A218B}Prefabs/Characters/Heads/Head_White_06/Head_White_06_camo_US_01.et";
-
-		if (currentHead.Contains("Head_White_08"))
-			return "{889ACA9FABA0471F}Prefabs/Characters/Heads/Head_White_08/Head_White_08_camo_US_01.et";
-
-		if (currentHead.Contains("Head_White_09"))
-			return "{F915F3544A1146EC}Prefabs/Characters/Heads/Head_White_09/Head_White_09_camo_US_01.et";
-
-		if (currentHead.Contains("Head_White_10"))
-			return "{7E7987E31FB379BF}Prefabs/Characters/Heads/Head_White_10/Head_White_10_camo_US_01.et";
 
 		return "";
 	}
