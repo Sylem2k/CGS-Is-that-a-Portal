@@ -40,11 +40,21 @@ class CGS_PortalTransferComponent : ScriptComponent
 		entrance.GetWorldTransform(sourceMatrix);
 		exitPortal.GetWorldTransform(exitMatrix);
 
+		vector sourceRight;
+		vector sourceUp;
+		vector sourceNormal;
+		source.GetPortalBasis(sourceRight, sourceUp, sourceNormal);
+
+		vector exitRight;
+		vector exitUp;
+		vector exitNormal;
+		destination.GetPortalBasis(exitRight, exitUp, exitNormal);
+
 		// Preserve the entry point's sideways offset instead of always
 		// forcing everybody through the exact middle of the exit.
 		vector relativePosition = character.GetOrigin() - sourceMatrix[3];
-		float side = vector.Dot(relativePosition, sourceMatrix[0]);
-		float height = vector.Dot(relativePosition, sourceMatrix[1]);
+		float side = vector.Dot(relativePosition, sourceRight);
+		float height = vector.Dot(relativePosition, sourceUp);
 
 		// Keep the character beyond the exit's early-catch zone.
 		float exitOffset = destination.GetExitOffset();
@@ -52,7 +62,7 @@ class CGS_PortalTransferComponent : ScriptComponent
 		if (exitOffset < minOffset)
 			exitOffset = minOffset;
 
-		vector destinationPosition = exitMatrix[3] - exitMatrix[0] * side + exitMatrix[1] * height + exitMatrix[2] * exitOffset;
+		vector destinationPosition = exitMatrix[3] - exitRight * side + exitUp * height + exitNormal * exitOffset;
 
 		// Read controller velocity first. The physics object may have no
 		// meaningful velocity for a player character.
@@ -65,11 +75,11 @@ class CGS_PortalTransferComponent : ScriptComponent
 		// Portal-space transform: flip entry normal and local sideways axis.
 		// Falling INTO an upward-facing floor portal should launch OUT of a
 		// downward-facing ceiling portal with the same (rotated) speed.
-		float localSideSpeed = vector.Dot(incomingVelocity, sourceMatrix[0]);
-		float localUpSpeed = vector.Dot(incomingVelocity, sourceMatrix[1]);
-		float localForwardSpeed = vector.Dot(incomingVelocity, sourceMatrix[2]);
+		float localSideSpeed = vector.Dot(incomingVelocity, sourceRight);
+		float localUpSpeed = vector.Dot(incomingVelocity, sourceUp);
+		float localForwardSpeed = vector.Dot(incomingVelocity, sourceNormal);
 
-		vector outgoingVelocity = exitMatrix[0] * (-localSideSpeed) + exitMatrix[1] * localUpSpeed - exitMatrix[2] * localForwardSpeed;
+		vector outgoingVelocity = exitRight * (-localSideSpeed) + exitUp * localUpSpeed - exitNormal * localForwardSpeed;
 
 		float speedMultiplier = destination.GetMomentumMultiplier();
 		if (speedMultiplier < 0)
@@ -110,7 +120,7 @@ class CGS_PortalTransferComponent : ScriptComponent
 			s_iDebugTransfers++;
 			if (s_iDebugTransfers <= 3 || s_iDebugTransfers % 10 == 0)
 			{
-				PrintFormat("[CGS PORTAL PHYSICS] Transfer #%1 %2 -> %3 exit=%4", s_iDebugTransfers, source.GetPortalID(), destination.GetPortalID(), destinationPosition);
+				PrintFormat("[CGS PORTAL PHYSICS] Transfer #%1 %2 -> %3 exit=%4 exitNormal=%5", s_iDebugTransfers, source.GetPortalID(), destination.GetPortalID(), destinationPosition, exitNormal);
 				PrintFormat("[CGS PORTAL PHYSICS] incoming=%1 outgoing=%2 momentumWanted=%3 physicsApplied=%4", incomingVelocity, outgoingVelocity, destination.ShouldPreserveMomentum(), velocityApplied);
 				if (physics)
 					PrintFormat("[CGS PORTAL PHYSICS] Character physics exists; dynamic=%1", physics.IsDynamic());
