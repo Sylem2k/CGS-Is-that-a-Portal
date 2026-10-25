@@ -143,9 +143,10 @@ modded class SCR_PlayerController
 		RpcDo_CGSPinkTarget(characterID);
 	}
 
-	// PINKIFIER - SKIN-ONLY BODY + HEAD TEST.
-	// Apply pink non-recursively to the root body and to at most one
-	// separately identified FACE/HEAD skin mesh. Never touch apparel.
+	// PINKIFIER - TEST VISUAL IDENTITY HEAD SWAP + BODY TINT.
+	// Uses the character identity system for a vanilla camouflage head.
+	// Never calls SetMaterial on a head or any attached equipment.
+	// The head will be CAMOUFLAGE, not pink, for this first safety test.
 	[RplRpc(RplChannel.Reliable, RplRcver.Broadcast)]
 	protected void RpcDo_CGSPinkTarget(RplId characterID)
 	{
@@ -154,16 +155,13 @@ modded class SCR_PlayerController
 
 		IEntity characterEntity = SCR_EntityHelper.RplIdToEntity(characterID);
 		ChimeraCharacter character = ChimeraCharacter.Cast(characterEntity);
-
 		if (!character || character.IsDeleted())
 		{
 			Print("[CGS PINKIFIER] Target unavailable on this machine.", LogLevel.WARNING);
 			return;
 		}
 
-		// Verify that the pink material can be loaded.
 		ResourceName pinkMaterial = "{6AB2F1A000000100}Common/Models/Data/CGS_Pinkifier_Pink.emat";
-
 		Resource loaded = Resource.Load(pinkMaterial);
 		if (!loaded || !loaded.IsValid())
 		{
@@ -171,187 +169,104 @@ modded class SCR_PlayerController
 			return;
 		}
 
-		// The non-recursive root-body tint previously colored exposed arms
-		// without the uniform T-pose caused by recoloring worn clothing.
-		VObject bodyMesh = character.GetVObject();
-		if (!bodyMesh)
+		if (!character.GetVObject())
 		{
-			Print("[CGS PINKIFIER SKIN TEST] Character has no root body mesh.", LogLevel.WARNING);
+			Print("[CGS PINKIFIER] Target has no root body mesh.", LogLevel.WARNING);
 			return;
 		}
 
+		// Only the authoritative server changes VisualIdentity. This
+		// experiment follows existing Reforger facepaint implementations.
+		// It never remaps the live head mesh.
+		if (Replication.IsServer())
+			CGS_TrySetVanillaCamoHead(character);
+
+		// Preserve the already-tested non-recursive root body skin tint.
 		SCR_Global.SetMaterial(character, pinkMaterial, false);
-
-		// Character faces may be a separate entity from the base body.
-		// Never paint helmets, uniforms, hair, worn gear, or weapons.
-		int headPainted = CGS_PaintFirstSkinHead(character, pinkMaterial, 0);
-		PrintFormat("[CGS PINKIFIER SKIN TEST] Target=%1 bodyPainted=1 headPainted=%2 clothingPainted=0", character, headPainted);
-		if (headPainted == 0)
-		{
-			Print("[CGS PINKIFIER SKIN TEST] Separate head/face mesh not identified; clothes untouched.", LogLevel.WARNING);
-			// Log non-clothing mesh identities for a later safe face match.
-			CGS_AuditUnmatchedSkinMeshes(character, 0);
-		}
+		PrintFormat("[CGS PINKIFIER IDENTITY TEST] Target=%1 bodyPink=1 attachedMeshRemaps=0", character);
 	}
 
-	// Diagnostic only: print potential body/face mesh entity paths.
-	// This never touches an entity's materials or skeletal attachment.
-	protected void CGS_AuditUnmatchedSkinMeshes(IEntity parent, int depth)
+	// Identity test: replace the assigned head prefab through the
+	// supported identity component, NOT by replacing a VObject.
+	// Head camouflage is deliberately used as a compatibility test.
+	protected void CGS_TrySetVanillaCamoHead(ChimeraCharacter character)
 	{
-		if (!parent || depth >= 4)
+		SCR_CharacterIdentityComponent identityComponent = SCR_CharacterIdentityComponent.Cast(character.FindComponent(SCR_CharacterIdentityComponent));
+		if (!identityComponent || !identityComponent.GetIdentity())
+		{
+			Print("[CGS PINKIFIER IDENTITY TEST] Character has no usable identity component.", LogLevel.WARNING);
 			return;
-
-		IEntity child = parent.GetChildren();
-		int visited = 0;
-		while (child && visited < 32)
-		{
-			IEntity nextChild = child.GetSibling();
-			visited++;
-
-			if (!child.IsDeleted() && !child.FindComponent(WeaponComponent) && !CGS_IsWearableClothing(child))
-			{
-				if (child.GetVObject())
-				{
-					string prefabName = "";
-					EntityPrefabData prefabData = child.GetPrefabData();
-					if (prefabData)
-						prefabName = prefabData.GetPrefabName();
-					PrintFormat("[CGS PINKIFIER SKIN AUDIT] depth=%1 entityName=%2 prefab=%3", depth, child.GetName(), prefabName);
-				}
-				CGS_AuditUnmatchedSkinMeshes(child, depth + 1);
-			}
-
-			child = nextChild;
-		}
-	}
-
-	// Paint a SINGLE exposed-skin head mesh, if the character has one.
-	// Unlike helmets and other gear, the candidate must be identifiable
-	// as a head/face entity and must not be a wearable or a weapon.
-	protected int CGS_PaintFirstSkinHead(IEntity parent, ResourceName pinkMaterial, int depth)
-	{
-		if (!parent || depth >= 8)
-			return 0;
-
-		IEntity child = parent.GetChildren();
-		int visited = 0;
-		while (child && visited < 96)
-		{
-			IEntity nextChild = child.GetSibling();
-			visited++;
-
-			if (!child.IsDeleted() && !child.FindComponent(WeaponComponent))
-			{
-				if (CGS_IsSkinHead(child) && child.GetVObject())
-				{
-					SCR_Global.SetMaterial(child, pinkMaterial, false);
-					PrintFormat("[CGS PINKIFIER FACE TEST] Applied to head entity=%1", child);
-					return 1;
-				}
-
-				// Do not descend into helmets, uniforms, vests or gear.
-				if (!CGS_IsWearableClothing(child))
-				{
-					if (CGS_PaintFirstSkinHead(child, pinkMaterial, depth + 1) > 0)
-						return 1;
-				}
-			}
-
-			child = nextChild;
 		}
 
-		return 0;
-	}
-
-	// Head skin differs from helmets, hats and headgear.
-	// Require a clearly head/face-like prefab or entity name.
-	protected bool CGS_IsSkinHead(IEntity entity)
-	{
-		if (!entity)
-			return false;
-
-		string hint = entity.GetName();
-		EntityPrefabData prefabData = entity.GetPrefabData();
-		if (prefabData)
-			hint = hint + " " + prefabData.GetPrefabName();
-
-		hint.ToLower();
-
-		if (hint.IndexOf("helmet") != -1 || hint.IndexOf("headgear") != -1)
-			return false;
-		if (hint.IndexOf("hair") != -1 || hint.IndexOf("balaclava") != -1)
-			return false;
-		if (hint.IndexOf("/hats/") != -1 || hint.IndexOf("/masks/") != -1)
-			return false;
-
-		return hint.IndexOf("/heads/") != -1
-			|| hint.IndexOf("/faces/") != -1
-			|| hint.IndexOf("head_") != -1
-			|| hint.IndexOf("face_") != -1
-			|| hint.IndexOf("basehead") != -1;
-	}
-
-	// Inspect wearables without changing clothing. Kept for diagnostics.
-	// Depth and sibling limits protect against unexpected hierarchies.
-	protected int CGS_CountWearableChildren(IEntity parent, int depth)
-	{
-		if (!parent || depth >= 8)
-			return 0;
-
-		int matched = 0;
-		int visited = 0;
-		IEntity child = parent.GetChildren();
-
-		while (child && visited < 96)
+		VisualIdentity visualIdentity = identityComponent.GetIdentity().GetVisualIdentity();
+		if (!visualIdentity)
 		{
-			IEntity nextChild = child.GetSibling();
-			visited++;
-
-			if (!child.IsDeleted() && !child.FindComponent(WeaponComponent))
-			{
-				if (CGS_IsWearableClothing(child) && child.GetVObject())
-				{
-					matched++;
-				}
-
-				// Inspect attachment wrappers without altering skinned objects.
-				matched += CGS_CountWearableChildren(child, depth + 1);
-			}
-
-			child = nextChild;
+			Print("[CGS PINKIFIER IDENTITY TEST] Character has no visual identity.", LogLevel.WARNING);
+			return;
 		}
 
-		return matched;
+		ResourceName currentHead = visualIdentity.GetHead();
+		if (!currentHead)
+		{
+			Print("[CGS PINKIFIER IDENTITY TEST] Current head prefab is empty.", LogLevel.WARNING);
+			return;
+		}
+
+		// Avoid repeated swap on subsequent shots.
+		if (currentHead.Contains("_camo_"))
+		{
+			PrintFormat("[CGS PINKIFIER IDENTITY TEST] Existing camo head already assigned=%1", currentHead);
+			return;
+		}
+
+		ResourceName newHead = CGS_GetVanillaTestCamo(currentHead);
+		if (!newHead)
+		{
+			PrintFormat("[CGS PINKIFIER IDENTITY TEST] No vanilla camo mapping for head=%1", currentHead);
+			return;
+		}
+
+		visualIdentity.SetHead(newHead);
+		identityComponent.CommitChanges();
+		identityComponent.SetIdentity(identityComponent.GetIdentity());
+		PrintFormat("[CGS PINKIFIER IDENTITY TEST] Head changed through VisualIdentity: old=%1 new=%2", currentHead, newHead);
 	}
 
-	// Identify likely wearables via entity and prefab naming, for diagnostics.
-	protected bool CGS_IsWearableClothing(IEntity entity)
+	// Vanilla identity-managed camouflage resources. No custom head
+	// prefabs are needed for this proof of correct skeletal attachment.
+	protected ResourceName CGS_GetVanillaTestCamo(ResourceName currentHead)
 	{
-		if (!entity)
-			return false;
+		if (currentHead.Contains("Head_Asian_02"))
+			return "{FF94E9F1DAB8496C}Prefabs/Characters/Heads/Head_Asian_02/Head_Asian_02_camo_US_01.et";
 
-		string hint = entity.GetName();
-		EntityPrefabData prefabData = entity.GetPrefabData();
-		if (prefabData)
-			hint = hint + " " + prefabData.GetPrefabName();
+		if (currentHead.Contains("Head_Black_02"))
+			return "{33850F6F8AC1FC61}Prefabs/Characters/Heads/Head_Black_02/Head_Black_02_camo_US_01.et";
 
-		hint.ToLower();
+		if (currentHead.Contains("Head_White_02"))
+			return "{43AA5BDFE4338F57}Prefabs/Characters/Heads/Head_White_02/Head_White_02_camo_US_01.et";
 
-		return hint.IndexOf("uniform") != -1
-			|| hint.IndexOf("clothing") != -1
-			|| hint.IndexOf("jacket") != -1
-			|| hint.IndexOf("shirt") != -1
-			|| hint.IndexOf("pants") != -1
-			|| hint.IndexOf("trousers") != -1
-			|| hint.IndexOf("fatigue") != -1
-			|| hint.IndexOf("coverall") != -1
-			|| hint.IndexOf("vest") != -1
-			|| hint.IndexOf("carrier") != -1
-			|| hint.IndexOf("helmet") != -1
-			|| hint.IndexOf("headgear") != -1
-			|| hint.IndexOf("gloves") != -1
-			|| hint.IndexOf("boots") != -1
-			|| hint.IndexOf("balaclava") != -1;
+		if (currentHead.Contains("Head_White_03"))
+			return "{51636CA07EC51127}Prefabs/Characters/Heads/Head_White_03/Head_White_03_camo_US_01.et";
+
+		if (currentHead.Contains("Head_White_04"))
+			return "{473E20387338226D}Prefabs/Characters/Heads/Head_White_04/Head_White_04_camo_US_01.et";
+
+		if (currentHead.Contains("Head_White_05"))
+			return "{36B119F39289239E}Prefabs/Characters/Heads/Head_White_05/Head_White_05_camo_US_01.et";
+
+		if (currentHead.Contains("Head_White_06"))
+			return "{A42053AFB05A218B}Prefabs/Characters/Heads/Head_White_06/Head_White_06_camo_US_01.et";
+
+		if (currentHead.Contains("Head_White_08"))
+			return "{889ACA9FABA0471F}Prefabs/Characters/Heads/Head_White_08/Head_White_08_camo_US_01.et";
+
+		if (currentHead.Contains("Head_White_09"))
+			return "{F915F3544A1146EC}Prefabs/Characters/Heads/Head_White_09/Head_White_09_camo_US_01.et";
+
+		if (currentHead.Contains("Head_White_10"))
+			return "{7E7987E31FB379BF}Prefabs/Characters/Heads/Head_White_10/Head_White_10_camo_US_01.et";
+
+		return "";
 	}
 
 	// PORTAL GUN - original weapon identification.
