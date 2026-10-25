@@ -143,9 +143,9 @@ modded class SCR_PlayerController
 		RpcDo_CGSPinkTarget(characterID);
 	}
 
-	// PINKIFIER - PHASE 3 CLOTHING-ONLY TEST.
-	// The character's body and face mesh remain unchanged.
-	// Apply the material individually to identified wearable meshes only.
+	// PINKIFIER - ANIMATION SAFETY TEST.
+	// Replacing skinned clothing mesh materials can break skeletal poses.
+	// Resolve and count clothing without touching character or clothing render objects.
 	[RplRpc(RplChannel.Reliable, RplRcver.Broadcast)]
 	protected void RpcDo_CGSPinkTarget(RplId characterID)
 	{
@@ -171,24 +171,22 @@ modded class SCR_PlayerController
 			return;
 		}
 
-		// Phase 3: do not paint character's root body. Walk its entity
-		// hierarchy and individually paint recognized clothing entities.
-		// Never ask SCR_Global to recursively paint attached child entities.
-		int painted = CGS_PaintWearableChildren(character, pinkMaterial, 0);
-		PrintFormat("[CGS PINKIFIER CLOTHING TEST] Target=%1 wearable meshes painted=%2 root body unchanged=1", character, painted);
-		if (painted == 0)
-			Print("[CGS PINKIFIER CLOTHING TEST] No clothing meshes matched. This character may use a different wearable hierarchy or prefab names.", LogLevel.WARNING);
+		// Preserve all existing skeletal mesh objects and animation links.
+		// Count matching clothing meshes only; do not recolor during this test.
+		int matched = CGS_CountWearableChildren(character, 0);
+		PrintFormat("[CGS PINKIFIER ANIMATION SAFE TEST] Target=%1 wearable meshes found=%2 material overrides=0", character, matched);
+		if (matched == 0)
+			Print("[CGS PINKIFIER ANIMATION SAFE TEST] No clothing meshes matched on this character.", LogLevel.WARNING);
 	}
 
-	// Paint only clothing-like equipment entities; never the body mesh,
-	// weapons, or unrelated children. Limits protect against unexpected
-	// hierarchies. This is still an experimental native material test.
-	protected int CGS_PaintWearableChildren(IEntity parent, ResourceName pinkMaterial, int depth)
+	// Read-only wearable enumeration. No SetObject/SetMaterial calls.
+	// Depth and sibling limits protect against unexpected hierarchies.
+	protected int CGS_CountWearableChildren(IEntity parent, int depth)
 	{
 		if (!parent || depth >= 8)
 			return 0;
 
-		int painted = 0;
+		int matched = 0;
 		int visited = 0;
 		IEntity child = parent.GetChildren();
 
@@ -201,24 +199,20 @@ modded class SCR_PlayerController
 			{
 				if (CGS_IsWearableClothing(child) && child.GetVObject())
 				{
-					SCR_Global.SetMaterial(child, pinkMaterial, false);
-					painted++;
+					matched++;
 				}
 
-				// Walk through meshless attachment wrappers as well; they
-				// may contain the actual uniform or vest mesh entity.
-				painted += CGS_PaintWearableChildren(child, pinkMaterial, depth + 1);
+				// Inspect attachment wrappers without altering skinned objects.
+				matched += CGS_CountWearableChildren(child, depth + 1);
 			}
 
 			child = nextChild;
 		}
 
-		return painted;
+		return matched;
 	}
 
-	// Use entity and prefab naming to restrict the experiment to clothing.
-	// This avoids relying on one faction's specific clothing components.
-	// A zero-hit warning will tell us if other modded clothing needs support.
+	// Identify likely wearables via entity and prefab naming, for logging only.
 	protected bool CGS_IsWearableClothing(IEntity entity)
 	{
 		if (!entity)
