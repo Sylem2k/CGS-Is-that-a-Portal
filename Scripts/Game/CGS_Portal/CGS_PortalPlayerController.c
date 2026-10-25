@@ -187,7 +187,42 @@ modded class SCR_PlayerController
 		int headPainted = CGS_PaintFirstSkinHead(character, pinkMaterial, 0);
 		PrintFormat("[CGS PINKIFIER SKIN TEST] Target=%1 bodyPainted=1 headPainted=%2 clothingPainted=0", character, headPainted);
 		if (headPainted == 0)
+		{
 			Print("[CGS PINKIFIER SKIN TEST] Separate head/face mesh not identified; clothes untouched.", LogLevel.WARNING);
+			// Log non-clothing mesh identities for a later safe face match.
+			CGS_AuditUnmatchedSkinMeshes(character, 0);
+		}
+	}
+
+	// Diagnostic only: print potential body/face mesh entity paths.
+	// This never touches an entity's materials or skeletal attachment.
+	protected void CGS_AuditUnmatchedSkinMeshes(IEntity parent, int depth)
+	{
+		if (!parent || depth >= 4)
+			return;
+
+		IEntity child = parent.GetChildren();
+		int visited = 0;
+		while (child && visited < 32)
+		{
+			IEntity nextChild = child.GetSibling();
+			visited++;
+
+			if (!child.IsDeleted() && !child.FindComponent(WeaponComponent) && !CGS_IsWearableClothing(child))
+			{
+				if (child.GetVObject())
+				{
+					string prefabName = "";
+					EntityPrefabData prefabData = child.GetPrefabData();
+					if (prefabData)
+						prefabName = prefabData.GetPrefabName();
+					PrintFormat("[CGS PINKIFIER SKIN AUDIT] depth=%1 entityName=%2 prefab=%3", depth, child.GetName(), prefabName);
+				}
+				CGS_AuditUnmatchedSkinMeshes(child, depth + 1);
+			}
+
+			child = nextChild;
+		}
 	}
 
 	// Paint a SINGLE exposed-skin head mesh, if the character has one.
