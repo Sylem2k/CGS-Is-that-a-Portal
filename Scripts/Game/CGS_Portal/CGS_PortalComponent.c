@@ -135,7 +135,16 @@ class CGS_PortalComponent : ScriptComponent
 	protected int m_iLastMPPairProbeMs = -10000;
 	protected int m_iLastMPNearbyProbeMs = -10000;
 
+	// A remote player character can report ZERO vertical velocity from
+	// CharacterController.GetVelocity() during a real fall. Sample the
+	// server-observed player transform over 80+ ms instead, so the
+	// transfer knows the speed BEFORE teleportation resets controller state.
+	// This is per portal, because each portal already observes all players.
 	protected ref map<IEntity, vector> m_mPreviousPositions = new map<IEntity, vector>();
+	protected ref map<IEntity, vector> m_mVelocityAnchorPositions = new map<IEntity, vector>();
+	protected ref map<IEntity, int> m_mVelocityAnchorTimes = new map<IEntity, int>();
+	protected ref map<IEntity, vector> m_mObservedVelocities = new map<IEntity, vector>();
+	protected ref map<IEntity, int> m_mObservedVelocityTimes = new map<IEntity, int>();
 
 	// Debug each wall approach at most once every 1.5 seconds per player.
 	protected ref map<IEntity, int> m_mLastWallDebugTimes = new map<IEntity, int>();
@@ -215,7 +224,67 @@ class CGS_PortalComponent : ScriptComponent
 			return;
 
 		m_mPreviousPositions.Remove(character);
+		m_mVelocityAnchorPositions.Remove(character);
+		m_mVelocityAnchorTimes.Remove(character);
+		m_mObservedVelocities.Remove(character);
+		m_mObservedVelocityTimes.Remove(character);
 		m_mLastWallDebugTimes.Remove(character);
+	}
+
+	// Measure position displacement over multiple server frames, rather
+	// than trusting the player CharacterController vertical velocity in MP.
+	// Small samples (one render frame) are noisy under packet interpolation.
+	// Skip large jumps, such as a predicted teleport/net correction.
+	protected void CGS_ObservePlayerSpeed(IEntity character, vector position, int nowMs)
+	{
+		vector anchorPosition;
+		int anchorTime;
+		if (!m_mVelocityAnchorPositions.Find(character, anchorPosition) || !m_mVelocityAnchorTimes.Find(character, anchorTime))
+		{
+			m_mVelocityAnchorPositions.Set(character, position);
+			m_mVelocityAnchorTimes.Set(character, nowMs);
+			return;
+		}
+
+		int dtMs = nowMs - anchorTime;
+		if (dtMs < 80)
+			return;
+
+		m_mVelocityAnchorPositions.Set(character, position);
+		m_mVelocityAnchorTimes.Set(character, nowMs);
+
+		if (dtMs > 350)
+		{
+			m_mObservedVelocities.Remove(character);
+			m_mObservedVelocityTimes.Remove(character);
+			return;
+		}
+
+		vector observed = (position - anchorPosition) * (1000.0 / dtMs);
+		// Discontinuities/teleports must not create artificial trap speed.
+		// Actual speed is still capped by the exit prefab's max speed.
+		if (observed.LengthSq() > 14400)
+		{
+			m_mObservedVelocities.Remove(character);
+			m_mObservedVelocityTimes.Remove(character);
+			return;
+		}
+
+		m_mObservedVelocities.Set(character, observed);
+		m_mObservedVelocityTimes.Set(character, nowMs);
+	}
+
+	protected bool CGS_GetObservedSpeed(IEntity character, vector currentPos, int nowMs, out vector velocity)
+	{
+		velocity = vector.Zero;
+		int sampleMs;
+		if (!m_mObservedVelocityTimes.Find(character, sampleMs) || nowMs - sampleMs > 250)
+			return false;
+
+		if (!m_mObservedVelocities.Find(character, velocity))
+			return false;
+
+		return true;
 	}
 
 	// Whether this point is still inside this portal's FULL catch area.
@@ -460,6 +529,11 @@ class CGS_PortalComponent : ScriptComponent
 
 			vector currentPos = character.GetOrigin();
 
+			// Track observed speed before examining any entry trigger.
+			// This also works when falling vertical controller velocity is 0.
+			int sampleNow = GetGame().GetWorld().GetWorldTime();
+			CGS_ObservePlayerSpeed(character, currentPos, sampleNow);
+
 			// Show whether the dedicated server can see a remote player's
 			// character standing near the portal. If cameras are live but
 			// this log never appears, the fault precedes the teleport call.
@@ -653,7 +727,10 @@ class CGS_PortalComponent : ScriptComponent
 
 			// An entry was detected. Log this once per attempted crossing,
 			// even if TryTransfer rejects it (e.g. destination outside map).
-			bool transferSucceeded = CGS_PortalTransferComponent.TryTransfer(character, this, partner, playerId);
+			vector measuredVelocity;
+			bool hasMeasuredVelocity = CGS_GetObservedSpeed(character, currentPos, sampleNow, measuredVelocity);
+			bool transferSucceeded = CGS_PortalTransferComponent.TryTransfer(
+				character, this, partner, playerId, hasMeasuredVelocity, measuredVelocity);
 			if (m_bDebug)
 				PrintFormat("[CGS PORTAL MP ATTEMPT] owner=%1 player=%2 color=%3 partner=%4 entry=%5 success=%6 actualPosition=%7",
 					m_iPortalOwnerID, playerId, m_iPortalID, partner.GetPortalID(), entryMode, transferSucceeded, character.GetOrigin());
