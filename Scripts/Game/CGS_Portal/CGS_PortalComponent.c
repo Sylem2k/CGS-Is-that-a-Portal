@@ -97,6 +97,15 @@ class CGS_PortalComponent : ScriptComponent
 	[Attribute("1.0", UIWidgets.EditBox, "EXPERIMENT: exit velocity multiplier")]
 	protected float m_fMomentumMultiplier;
 
+	// Keep a player's last portal-exit velocity for the next valid
+	// traversal, instead of losing speed to MP position interpolation.
+	// Stacking only applies while actively falling or moving quickly.
+	[Attribute("1", UIWidgets.CheckBox, "Momentum bank: preserve speed across linked portal jumps")]
+	protected bool m_bStackMomentum;
+
+	[Attribute("6", UIWidgets.EditBox, "Momentum bank: maximum seconds since prior launch to stack speed")]
+	protected float m_fMomentumStackWindow;
+
 	// Trap builder: allow launches even from a slow walk. 0 = stock
 	// momentum conservation, so existing portals behave the same.
 	[Attribute("0", UIWidgets.EditBox, "Trap launch: MINIMUM exit speed in m/s; 0 = inherit speed only")]
@@ -811,6 +820,16 @@ class CGS_PortalComponent : ScriptComponent
 	float GetMomentumMultiplier()
 	{
 		return m_fMomentumMultiplier;
+	}
+
+	bool ShouldStackMomentum()
+	{
+		return m_bStackMomentum;
+	}
+
+	float GetMomentumStackWindow()
+	{
+		return m_fMomentumStackWindow;
 	}
 
 	float GetMaxExitSpeed()
