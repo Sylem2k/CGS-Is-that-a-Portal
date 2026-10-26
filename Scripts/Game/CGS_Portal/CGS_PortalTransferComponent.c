@@ -141,11 +141,8 @@ class CGS_PortalTransferComponent : ScriptComponent
 		if (controllerVelocity.LengthSq() < 0.01 && physics && physics.IsDynamic())
 			controllerVelocity = physics.GetVelocity();
 
-		// On dedicated MP clients the server-side GetVelocity() can report
-		// <horizontal, 0, horizontal> even while the player FALLS.
-		// Prefer 80ms+ server-observed position velocity if available.
-		// Do not blindly reuse a seven-second virtual launch when someone
-		// has already landed and is merely walking back into a portal.
+		// Dedicated MP can report low or zero native velocity during
+		// a real fall, so preserve the measured entry-speed code from PR44.
 		vector incomingVelocity = controllerVelocity;
 		string speedSource = "controller";
 		if (hasMeasuredVelocity && measuredVelocity.LengthSq() >= 0.04)
@@ -159,10 +156,62 @@ class CGS_PortalTransferComponent : ScriptComponent
 			speedSource = "falling-carried";
 		}
 
+		// CHAIN STREAK: The owning client carries our virtual momentum,
+		// but the dedicated server may see only a fraction of that speed.
+		// Recover the recent exit's virtual velocity while moving rapidly
+		// or airborne, then multiply it again at THIS destination.
+		// Standing/walking after a landing may not reactivate old speed.
+		vector savedVelocity;
+		bool hasBank = false;
+		bool usedBank = false;
+		float observedSpeed = incomingVelocity.Length();
+		bool activeFlight = controller.IsFalling();
+		bool movingFast = observedSpeed >= 6.0;
+		if (destination.ShouldStackMomentum() && (activeFlight || movingFast))
+		{
+			hasBank = CGS_PortalMomentumService.TryGetStackedVelocity(
+				character, destination.GetMomentumStackWindow(), savedVelocity);
+			if (hasBank)
+			{
+				float savedSpeed = savedVelocity.Length();
+				if (savedSpeed > observedSpeed)
+				{
+					if (observedSpeed >= 1.5)
+					{
+						// Reuse the bank's magnitude only when the player
+						// is still moving in roughly the bank direction.
+						// Reversing or braking movement shouldn't charge
+						// an entirely unrelated portal entry.
+						float aligned = vector.Dot(incomingVelocity / observedSpeed, savedVelocity / savedSpeed);
+						if (aligned > 0.25)
+						{
+							incomingVelocity = incomingVelocity * (savedSpeed / observedSpeed);
+							usedBank = true;
+						}
+					}
+					else if (activeFlight)
+					{
+						// After a teleport, controller/net movement can
+						// briefly return zero although airborne.
+						incomingVelocity = savedVelocity;
+						usedBank = true;
+					}
+				}
+			}
+		}
+
+		if (usedBank)
+			speedSource = "bank";
+
 		if (source.IsDebugEnabled() || destination.IsDebugEnabled())
+		{
 			PrintFormat("[CGS PORTAL ENTRY SPEED] player=%1 falling=%2 sample=%3 source=%4 controller=%5 observed=%6 incoming=%7",
 				playerId, controller.IsFalling(), hasMeasuredVelocity, speedSource,
 				controllerVelocity, measuredVelocity, incomingVelocity);
+			PrintFormat("[CGS PORTAL MOMENTUM BANK] player=%1 hasBank=%2 used=%3 airborne=%4 fast=%5 sampledSpeed=%6 bankSpeed=%7 finalEntrySpeed=%8",
+				playerId, hasBank, usedBank, activeFlight, movingFast,
+				observedSpeed, savedVelocity.Length(), incomingVelocity.Length());
+		}
 
 		// Portal-space transform: flip entry normal and local sideways axis.
 		// Falling INTO an upward-facing floor portal should launch OUT of a
