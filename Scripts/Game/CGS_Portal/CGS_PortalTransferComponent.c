@@ -14,6 +14,13 @@ class CGS_PortalTransferComponent : ScriptComponent
 	protected static ref map<IEntity, CGS_PortalComponent> s_mProtectedExitPortals = new map<IEntity, CGS_PortalComponent>();
 	protected static ref map<IEntity, int> s_mExitProtectionStarted = new map<IEntity, int>();
 
+	// Dedicated MP: one successful transfer can take several network
+	// frames to update the server-observed position. The source portal
+	// must not re-issue the same teleport while its character still
+	// appears in the original entrance area.
+	protected static ref map<IEntity, CGS_PortalComponent> s_mProtectedSourcePortals = new map<IEntity, CGS_PortalComponent>();
+	protected static ref map<IEntity, int> s_mSourceProtectionStarted = new map<IEntity, int>();
+
 	// Invoked by each portal once per server frame, BEFORE testing for
 	// WALL_APPROACH, WALK_ON, PLANE, or the expanded FALL_ZONE.
 	static bool IsExitEntrySuppressed(IEntity character, CGS_PortalComponent portal)
@@ -45,6 +52,43 @@ class CGS_PortalTransferComponent : ScriptComponent
 		return false;
 	}
 
+	// Prevent repeat entry from the SAME source portal while an Owner RPC
+	// is still making its way to a remote client's predicted character.
+	// Different portals stay available for legitimate fast chains.
+	static bool IsSourceEntrySuppressed(IEntity character, CGS_PortalComponent portal)
+	{
+		if (!Replication.IsServer() || !character || !portal)
+			return false;
+
+		CGS_PortalComponent protectedSource;
+		if (!s_mProtectedSourcePortals.Find(character, protectedSource) || protectedSource != portal)
+			return false;
+
+		int now = GetGame().GetWorld().GetWorldTime();
+		int startedAt = now;
+		s_mSourceProtectionStarted.Find(character, startedAt);
+		int elapsed = now - startedAt;
+
+		// Require at least one short net-frame settling window. Existing
+		// 150ms global cooldown remains in TryTransfer as a safety net.
+		if (elapsed < 200)
+			return true;
+
+		// Re-arm only after the server observes the player truly leave
+		// the source's full trigger area, not after a single failed
+		// attempt at teleporting a player whose position is still stale.
+		// Three-second failsafe lets another deliberate approach retry
+		// if an owner RPC is lost or a character cannot leave the area.
+		if (elapsed < 3000 && portal.IsWithinExitCaptureArea(character.GetOrigin()))
+			return true;
+
+		s_mProtectedSourcePortals.Remove(character);
+		s_mSourceProtectionStarted.Remove(character);
+		if (portal.IsDebugEnabled())
+			PrintFormat("[CGS PORTAL MP SOURCE] Re-armed source=%1 after=%2ms", portal.GetPortalID(), elapsed);
+		return false;
+	}
+
 	// Replacement/deletion must not leave a stale portal component inside
 	// the map, especially if the player immediately shoots that color again.
 	static void ForgetDeletedPortal(CGS_PortalComponent portal)
@@ -59,10 +103,18 @@ class CGS_PortalTransferComponent : ScriptComponent
 				affectedCharacters.Insert(character);
 		}
 
+		foreach (IEntity character, CGS_PortalComponent protectedSource : s_mProtectedSourcePortals)
+		{
+			if (protectedSource == portal && !affectedCharacters.Contains(character))
+				affectedCharacters.Insert(character);
+		}
+
 		foreach (IEntity character : affectedCharacters)
 		{
 			s_mProtectedExitPortals.Remove(character);
 			s_mExitProtectionStarted.Remove(character);
+			s_mProtectedSourcePortals.Remove(character);
+			s_mSourceProtectionStarted.Remove(character);
 		}
 	}
 
@@ -363,6 +415,14 @@ class CGS_PortalTransferComponent : ScriptComponent
 		}
 
 		s_LastTransferTimes.Set(character, now);
+
+		// The same SOURCE must not accept another shot while the
+		// remote owner is still receiving this successful transfer.
+		s_mProtectedSourcePortals.Set(character, source);
+		s_mSourceProtectionStarted.Set(character, now);
+		if (source.IsDebugEnabled() || destination.IsDebugEnabled())
+			PrintFormat("[CGS PORTAL MP SOURCE] Protected source=%1 player=%2 until server sees departure",
+				source.GetPortalID(), playerId);
 
 		// The teleport physically moves the CHARACTER, not the portal.
 		// Clear each portal's cached pre-teleport position so a jump
