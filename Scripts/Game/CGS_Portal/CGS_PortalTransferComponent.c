@@ -205,6 +205,24 @@ class CGS_PortalTransferComponent : ScriptComponent
 				vector.Distance(character.GetOrigin(), destinationPosition));
 		}
 
+		// Player-controlled entities are predicted on their owning clients.
+		// In dedicated MP, mirror the server-approved safe teleport to the
+		// specific owner's controller. This is a reliable Owner RPC rather
+		// than a Broadcast RPC, so it scales to busy multiplayer servers.
+		if (safeMode && Replication.IsRunning())
+		{
+			PlayerController ownerController = GetGame().GetPlayerManager().GetPlayerController(playerId);
+			SCR_PlayerController playerController = SCR_PlayerController.Cast(ownerController);
+			if (playerController)
+			{
+				playerController.CGS_ServerSendPortalTeleportToOwner(destinationPosition);
+			}
+			else if (source.IsDebugEnabled() || destination.IsDebugEnabled())
+			{
+				PrintFormat("[CGS PORTAL MP OWNER] Missing controller for player=%1; server teleport alone", playerId);
+			}
+		}
+
 		bool velocityApplied = false;
 		if (!safeMode && destination.ShouldPreserveMomentum() && physics && physics.IsDynamic())
 		{
@@ -266,6 +284,32 @@ class CGS_PortalTransferComponent : ScriptComponent
 			}
 		}
 
+		// Confirm the server position AFTER an engine update and network
+		// response; the immediate GetOrigin() in MP MOVE can be stale.
+		// Resolve by player ID at callback time, never retain raw IEntity.
+		if (source.IsDebugEnabled() || destination.IsDebugEnabled())
+			GetGame().GetCallqueue().CallLater(CGS_CheckMPExitAfterDelay, 350, false, playerId, destinationPosition);
+
 		return true;
+	}
+
+	protected static void CGS_CheckMPExitAfterDelay(int playerId, vector requestedExit)
+	{
+		if (!Replication.IsServer() || !GetGame())
+			return;
+
+		PlayerManager manager = GetGame().GetPlayerManager();
+		if (!manager)
+			return;
+
+		IEntity controlled = manager.GetPlayerControlledEntity(playerId);
+		if (!controlled)
+		{
+			PrintFormat("[CGS PORTAL MP CONFIRM] player=%1 missing controlled entity after 350ms", playerId);
+			return;
+		}
+
+		PrintFormat("[CGS PORTAL MP CONFIRM] player=%1 after350ms=%2 requestedExit=%3 distanceToExit=%4",
+			playerId, controlled.GetOrigin(), requestedExit, vector.Distance(controlled.GetOrigin(), requestedExit));
 	}
 }
