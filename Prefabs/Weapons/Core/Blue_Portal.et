@@ -30,6 +30,7 @@ GenericEntity {
    m_bUseSafePlayerTeleport 1
    m_bPreserveMomentum 1
    m_fMomentumMultiplier 1
+   m_fMinimumExitSpeed 0
    m_fMaxExitSpeed 30
    m_bSimulateMomentum 1
    m_fMomentumCarrySeconds 4
