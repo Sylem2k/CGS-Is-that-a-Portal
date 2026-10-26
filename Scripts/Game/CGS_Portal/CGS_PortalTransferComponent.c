@@ -150,18 +150,13 @@ class CGS_PortalTransferComponent : ScriptComponent
 			incomingVelocity = measuredVelocity;
 			speedSource = "observed";
 		}
-		else if (controller.IsFalling())
-		{
-			incomingVelocity = CGS_PortalMomentumService.GetEffectiveVelocity(character, controllerVelocity);
-			speedSource = "falling-carried";
-		}
 
 		// CHAIN STREAK: The owning client carries our virtual momentum,
 		// but the dedicated server may see only a fraction of that speed.
 		// Recover the recent exit's virtual velocity while moving rapidly
 		// or airborne, then multiply it again at THIS destination.
 		// Standing/walking after a landing may not reactivate old speed.
-		vector savedVelocity;
+		vector savedVelocity = vector.Zero;
 		bool hasBank = false;
 		bool usedBank = false;
 		float observedSpeed = incomingVelocity.Length();
@@ -191,10 +186,16 @@ class CGS_PortalTransferComponent : ScriptComponent
 					}
 					else if (activeFlight)
 					{
-						// After a teleport, controller/net movement can
-						// briefly return zero although airborne.
-						incomingVelocity = savedVelocity;
-						usedBank = true;
+						// A nearly-zero position sample is trustworthy
+						// as a net interpolation stall ONLY immediately
+						// following a launch, not several seconds later
+						// after landing and jumping back into a portal.
+						vector freshVelocity;
+						if (CGS_PortalMomentumService.TryGetStackedVelocity(character, 1.0, freshVelocity))
+						{
+							incomingVelocity = freshVelocity;
+							usedBank = true;
+						}
 					}
 				}
 			}
