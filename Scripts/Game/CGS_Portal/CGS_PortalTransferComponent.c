@@ -67,7 +67,7 @@ class CGS_PortalTransferComponent : ScriptComponent
 	}
 
 	// Phase 1.3: only player characters. No vehicles or ragdolls yet.
-	static bool TryTransfer(IEntity character, CGS_PortalComponent source, CGS_PortalComponent destination, int playerId)
+	static bool TryTransfer(IEntity character, CGS_PortalComponent source, CGS_PortalComponent destination, int playerId, bool hasMeasuredVelocity, vector measuredVelocity)
 	{
 		if (!Replication.IsServer() || !character || !source || !destination)
 			return false;
@@ -141,9 +141,28 @@ class CGS_PortalTransferComponent : ScriptComponent
 		if (controllerVelocity.LengthSq() < 0.01 && physics && physics.IsDynamic())
 			controllerVelocity = physics.GetVelocity();
 
-		// Use the previously CARRIED velocity when chaining portals.
-		// Safe teleport does not reliably preserve controller velocity.
-		vector incomingVelocity = CGS_PortalMomentumService.GetEffectiveVelocity(character, controllerVelocity);
+		// On dedicated MP clients the server-side GetVelocity() can report
+		// <horizontal, 0, horizontal> even while the player FALLS.
+		// Prefer 80ms+ server-observed position velocity if available.
+		// Do not blindly reuse a seven-second virtual launch when someone
+		// has already landed and is merely walking back into a portal.
+		vector incomingVelocity = controllerVelocity;
+		string speedSource = "controller";
+		if (hasMeasuredVelocity && measuredVelocity.LengthSq() >= 0.04)
+		{
+			incomingVelocity = measuredVelocity;
+			speedSource = "observed";
+		}
+		else if (controller.IsFalling())
+		{
+			incomingVelocity = CGS_PortalMomentumService.GetEffectiveVelocity(character, controllerVelocity);
+			speedSource = "falling-carried";
+		}
+
+		if (source.IsDebugEnabled() || destination.IsDebugEnabled())
+			PrintFormat("[CGS PORTAL ENTRY SPEED] player=%1 falling=%2 sample=%3 source=%4 controller=%5 observed=%6 incoming=%7",
+				playerId, controller.IsFalling(), hasMeasuredVelocity, speedSource,
+				controllerVelocity, measuredVelocity, incomingVelocity);
 
 		// Portal-space transform: flip entry normal and local sideways axis.
 		// Falling INTO an upward-facing floor portal should launch OUT of a
@@ -154,13 +173,17 @@ class CGS_PortalTransferComponent : ScriptComponent
 
 		vector outgoingVelocity = exitRight * (-localSideSpeed) + exitUp * localUpSpeed - exitNormal * localForwardSpeed;
 
+		// Each exit has its OWN multiplier. Blue -> Orange uses Orange's
+		// multiplier; Orange -> Blue uses Blue's. A chained loop can
+		// compound actual speed, with the existing max exit speed cap.
 		float speedMultiplier = destination.GetMomentumMultiplier();
 		if (speedMultiplier < 0)
 			speedMultiplier = 0;
 		outgoingVelocity = outgoingVelocity * speedMultiplier;
 
-		// Optional trap launch: push even slow walkers out of a portal
-		// while retaining the entry vector for genuinely fast arrivals.
+		// Optional MINIMUM speed for deliberately boosted portals.
+		// Both default prefabs now set this to 0, so walking speed is
+		// never replaced by an artificial fixed-speed launch.
 		float minimumSpeed = destination.GetMinimumExitSpeed();
 		if (minimumSpeed > 100)
 			minimumSpeed = 100;
@@ -178,6 +201,11 @@ class CGS_PortalTransferComponent : ScriptComponent
 		float outputSpeed = outgoingVelocity.Length();
 		if (maxSpeed > 0 && outputSpeed > maxSpeed)
 			outgoingVelocity = outgoingVelocity * (maxSpeed / outputSpeed);
+
+		if (source.IsDebugEnabled() || destination.IsDebugEnabled())
+			PrintFormat("[CGS PORTAL SPEED MULTIPLIER] player=%1 entry=%2m/s exit=%3m/s exitColor=%4 multiplier=%5 minimum=%6 cap=%7",
+				playerId, incomingVelocity.Length(), outgoingVelocity.Length(),
+				destination.GetPortalID(), speedMultiplier, minimumSpeed, maxSpeed);
 
 		// Fall-to-launch diagnostic: falling into an upward-facing floor
 		// portal should come OUT of the destination along its normal
