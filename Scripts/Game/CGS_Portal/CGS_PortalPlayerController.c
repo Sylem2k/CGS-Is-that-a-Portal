@@ -10,6 +10,11 @@ modded class SCR_PlayerController
 	{
 		super.OnUpdate(timeSlice);
 
+		// Maintain momentum on the owning client, where Reforger
+		// predicts its character controller. The server still tracks
+		// the effective velocity for chaining future portal entries.
+		CGS_PortalMomentumService.UpdateOwner();
+
 		if (!GetGame() || GetGame().GetPlayerController() != this)
 			return;
 
@@ -272,44 +277,42 @@ modded class SCR_PlayerController
 		return "";
 	}
 
-	// PORTAL MP: move the owning client's predicted character as well
-	// as the server's authoritative character. Reforger player movement
-	// is client-predicted, so the server-only safe teleport can appear
-	// to trigger and then snap back on a dedicated multiplayer server.
-	//
-	// This RPC is sent ONLY by the server to the player controller's
-	// owner. It never grants clients authority to request teleporting.
-	void CGS_ServerSendPortalTeleportToOwner(vector exitPosition)
+	// PORTAL MP: Reforger characters are client-predicted.
+	// One reliable Owner RPC handles BOTH initial teleport and local
+	// virtual momentum, in the correct order, from a server-approved shot.
+	void CGS_ServerSendPortalTeleportToOwner(vector exitPosition, vector carryVelocity, float carrySeconds, float gravity, float maxStep, bool simulateMomentum)
 	{
-		if (!Replication.IsServer())
+		if (!Replication.IsServer() || !Replication.IsRunning())
 			return;
 
-		// In single-player the existing server teleport is sufficient.
-		if (!Replication.IsRunning())
-			return;
-
-		Rpc(RpcDo_CGSPortalTeleportOwner, exitPosition);
-		PrintFormat("[CGS PORTAL MP OWNER] Server sent exit to owner player=%1 position=%2", GetPlayerId(), exitPosition);
+		Rpc(RpcDo_CGSPortalTeleportOwner, exitPosition, carryVelocity, carrySeconds, gravity, maxStep, simulateMomentum);
+		PrintFormat("[CGS PORTAL MP OWNER] Server sent owner=%1 exit=%2 momentum=%3 velocity=%4",
+			GetPlayerId(), exitPosition, simulateMomentum, carryVelocity);
 	}
 
 	[RplRpc(RplChannel.Reliable, RplRcver.Owner)]
-	protected void RpcDo_CGSPortalTeleportOwner(vector exitPosition)
+	protected void RpcDo_CGSPortalTeleportOwner(vector exitPosition, vector carryVelocity, float carrySeconds, float gravity, float maxStep, bool simulateMomentum)
 	{
-		// A listen-server host already took the authoritative teleport.
+		// A listen-server host uses the existing server simulation path.
 		if (Replication.IsServer() || !GetGame() || GetGame().GetPlayerController() != this)
 			return;
 
-		// Reforger's supported helper teleports the LOCAL controlled
-		// character, including its predicted character-controller state.
-		bool accepted = SCR_Global.TeleportLocalPlayer(exitPosition);
-
+		// Always cancel a prior flight when another portal is traversed.
 		IEntity character = GetControlledEntity();
 		if (character)
-			PrintFormat("[CGS PORTAL MP OWNER] Client local player=%1 helperAccepted=%2 target=%3 immediateLocalPosition=%4",
-				SCR_PlayerController.GetLocalPlayerId(), accepted, exitPosition, character.GetOrigin());
-		else
-			PrintFormat("[CGS PORTAL MP OWNER] Client local player=%1 helperAccepted=%2 target=%3 controlledEntityMissing=1",
-				SCR_PlayerController.GetLocalPlayerId(), accepted, exitPosition);
+			CGS_PortalMomentumService.Stop(character);
+
+		// This helper is already confirmed to fix owner snapback in MP.
+		bool accepted = SCR_Global.TeleportLocalPlayer(exitPosition);
+		character = GetControlledEntity();
+
+		PrintFormat("[CGS PORTAL MP OWNER] Client player=%1 accepted=%2 exit=%3 momentum=%4 velocity=%5",
+			SCR_PlayerController.GetLocalPlayerId(), accepted, exitPosition, simulateMomentum, carryVelocity);
+
+		if (accepted && character && simulateMomentum)
+		{
+			CGS_PortalMomentumService.StartOwner(character, carryVelocity, carrySeconds, gravity, maxStep, true);
+		}
 	}
 
 	// PORTAL GUN - original weapon identification.
