@@ -145,6 +145,11 @@ class CGS_PortalComponent : ScriptComponent
 	protected ref map<IEntity, int> m_mVelocityAnchorTimes = new map<IEntity, int>();
 	protected ref map<IEntity, vector> m_mObservedVelocities = new map<IEntity, vector>();
 	protected ref map<IEntity, int> m_mObservedVelocityTimes = new map<IEntity, int>();
+	// Keep the last convincing downward sample for a short period.
+	// Network position interpolation can show one zero-motion interval
+	// immediately before a FALL_ZONE catch.
+	protected ref map<IEntity, vector> m_mRecentFallVelocities = new map<IEntity, vector>();
+	protected ref map<IEntity, int> m_mRecentFallTimes = new map<IEntity, int>();
 
 	// Debug each wall approach at most once every 1.5 seconds per player.
 	protected ref map<IEntity, int> m_mLastWallDebugTimes = new map<IEntity, int>();
@@ -228,6 +233,8 @@ class CGS_PortalComponent : ScriptComponent
 		m_mVelocityAnchorTimes.Remove(character);
 		m_mObservedVelocities.Remove(character);
 		m_mObservedVelocityTimes.Remove(character);
+		m_mRecentFallVelocities.Remove(character);
+		m_mRecentFallTimes.Remove(character);
 		m_mLastWallDebugTimes.Remove(character);
 	}
 
@@ -272,19 +279,37 @@ class CGS_PortalComponent : ScriptComponent
 
 		m_mObservedVelocities.Set(character, observed);
 		m_mObservedVelocityTimes.Set(character, nowMs);
+
+		if (observed[1] < -0.5)
+		{
+			m_mRecentFallVelocities.Set(character, observed);
+			m_mRecentFallTimes.Set(character, nowMs);
+		}
 	}
 
-	protected bool CGS_GetObservedSpeed(IEntity character, vector currentPos, int nowMs, out vector velocity)
+	protected bool CGS_GetObservedSpeed(IEntity character, int nowMs, bool isFalling, out vector velocity)
 	{
 		velocity = vector.Zero;
+
 		int sampleMs;
-		if (!m_mObservedVelocityTimes.Find(character, sampleMs) || nowMs - sampleMs > 250)
-			return false;
+		bool hasCurrentSample = m_mObservedVelocityTimes.Find(character, sampleMs) && nowMs - sampleMs <= 250;
+		if (hasCurrentSample && !m_mObservedVelocities.Find(character, velocity))
+			hasCurrentSample = false;
 
-		if (!m_mObservedVelocities.Find(character, velocity))
-			return false;
+		// A valid downward sample remains useful briefly if the next
+		// network update leaves the character stationary for one frame.
+		int fallSampleMs;
+		vector fallVelocity;
+		if (isFalling && m_mRecentFallTimes.Find(character, fallSampleMs) && nowMs - fallSampleMs <= 350)
+		{
+			if (m_mRecentFallVelocities.Find(character, fallVelocity) && (!hasCurrentSample || velocity[1] > -0.5))
+			{
+				velocity = fallVelocity;
+				return true;
+			}
+		}
 
-		return true;
+		return hasCurrentSample;
 	}
 
 	// Whether this point is still inside this portal's FULL catch area.
@@ -728,7 +753,11 @@ class CGS_PortalComponent : ScriptComponent
 			// An entry was detected. Log this once per attempted crossing,
 			// even if TryTransfer rejects it (e.g. destination outside map).
 			vector measuredVelocity;
-			bool hasMeasuredVelocity = CGS_GetObservedSpeed(character, currentPos, sampleNow, measuredVelocity);
+			ChimeraCharacter observedCharacter = ChimeraCharacter.Cast(character);
+			bool isFalling = false;
+			if (observedCharacter && observedCharacter.GetCharacterController())
+				isFalling = observedCharacter.GetCharacterController().IsFalling();
+			bool hasMeasuredVelocity = CGS_GetObservedSpeed(character, sampleNow, isFalling, measuredVelocity);
 			bool transferSucceeded = CGS_PortalTransferComponent.TryTransfer(
 				character, this, partner, playerId, hasMeasuredVelocity, measuredVelocity);
 			if (m_bDebug)
