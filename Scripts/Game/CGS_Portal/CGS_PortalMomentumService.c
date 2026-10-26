@@ -5,10 +5,11 @@
 // SetVelocity(). The player's Physics body is non-dynamic, so SetVelocity()
 // does not launch that character.
 //
-// Instead, keep a "virtual" desired velocity and compensate for the difference
-// between this velocity and the real controller's velocity each server frame.
-// This is a collision-swept POSITION ASSIST, NOT native rigidbody momentum.
-// It is opt-in and intentionally separate from the stable portal loop.
+// Keep a virtual desired velocity and compensate for the difference from native
+// character-controller movement. In multiplayer the OWNER applies the correction
+// to its own predicted character; the server keeps velocity for portal chaining.
+// A local/listen host still uses the server movement path. This is a swept
+// position assist, NOT true physics velocity or collision immunity.
 //------------------------------------------------------------------------------------------------
 class CGS_PortalMomentumState : Managed
 {
@@ -19,6 +20,7 @@ class CGS_PortalMomentumState : Managed
 	float m_fGravity;
 	float m_fMaxStep;
 	bool m_bDebug;
+	bool m_bTrackOnly;
 	int m_iTicks;
 }
 
@@ -55,14 +57,34 @@ class CGS_PortalMomentumService
 		}
 	}
 
-	// Arm after the initial portal transfer has completed.
-	static void Start(IEntity character, vector wantedVelocity, float durationSeconds, float gravity, float maxStep, bool debugLog)
+	// Authoritative server remembers the virtual velocity for chaining.
+	// For remote MP players it does not fight the owner's predicted movement.
+	static void Start(IEntity character, vector wantedVelocity, float durationSeconds, float gravity, float maxStep, bool debugLog, bool trackOnly)
 	{
 		if (!Replication.IsServer() || !character)
 			return;
 
+		StartInternal(character, wantedVelocity, durationSeconds, gravity, maxStep, debugLog, trackOnly);
+	}
+
+	// Called only by the reliable Owner RPC after the client's actual
+	// teleport. The owner runs the same swept momentum steps locally.
+	static void StartOwner(IEntity character, vector wantedVelocity, float durationSeconds, float gravity, float maxStep, bool debugLog)
+	{
+		if (Replication.IsServer() || !GetGame() || !character)
+			return;
+
+		PlayerController localController = GetGame().GetPlayerController();
+		if (!localController || localController.GetControlledEntity() != character)
+			return;
+
+		StartInternal(character, wantedVelocity, durationSeconds, gravity, maxStep, debugLog, false);
+	}
+
+	protected static void StartInternal(IEntity character, vector wantedVelocity, float durationSeconds, float gravity, float maxStep, bool debugLog, bool trackOnly)
+	{
 		Stop(character);
-		if (durationSeconds <= 0 || wantedVelocity.LengthSq() < 0.01)
+		if (!GetGame() || !GetGame().GetWorld() || durationSeconds <= 0 || wantedVelocity.LengthSq() < 0.01)
 			return;
 
 		if (durationSeconds > 15)
@@ -85,18 +107,38 @@ class CGS_PortalMomentumService
 		state.m_fGravity = gravity;
 		state.m_fMaxStep = maxStep;
 		state.m_bDebug = debugLog;
+		state.m_bTrackOnly = trackOnly;
 		s_aActive.Insert(state);
 
 		s_iMomentumArms++;
-		if (debugLog && (s_iMomentumArms <= 3 || s_iMomentumArms % 10 == 0))
-			PrintFormat("[CGS MOMENTUM] Arm #%1 virtualVelocity=%2 duration=%3s gravity=%4", s_iMomentumArms, wantedVelocity, durationSeconds, gravity);
+		if (debugLog)
+			PrintFormat("[CGS MOMENTUM MP] Arm #%1 server=%2 trackOnly=%3 velocity=%4 duration=%5s gravity=%6",
+				s_iMomentumArms, Replication.IsServer(), trackOnly, wantedVelocity, durationSeconds, gravity);
 	}
 
-	// Call from the existing portal EOnFrame. Run ONCE per server frame,
-	// even when both Blue and Orange receive their frame events.
+	// Server: track virtual velocity, move only a locally controlled host.
+	// Runs once per server frame, even when both portals call it.
 	static void Update()
 	{
-		if (!Replication.IsServer() || !GetGame())
+		if (!Replication.IsServer())
+			return;
+
+		UpdateInternal();
+	}
+
+	// Owning client: called once per rendered frame by SCR_PlayerController.
+	// This mirrors the teleport owner-RPC path already proven in MP.
+	static void UpdateOwner()
+	{
+		if (Replication.IsServer() || !GetGame() || !GetGame().GetPlayerController())
+			return;
+
+		UpdateInternal();
+	}
+
+	protected static void UpdateInternal()
+	{
+		if (!GetGame() || !GetGame().GetWorld())
 			return;
 
 		int now = GetGame().GetWorld().GetWorldTime();
@@ -131,6 +173,18 @@ class CGS_PortalMomentumService
 				continue;
 			}
 
+			// Never let another client's static momentum state move this
+			// machine's predicted character.
+			if (!Replication.IsServer())
+			{
+				PlayerController localController = GetGame().GetPlayerController();
+				if (!localController || localController.GetControlledEntity() != character)
+				{
+					s_aActive.RemoveOrdered(i);
+					continue;
+				}
+			}
+
 			int elapsedMs = now - state.m_iLastTickMs;
 			if (elapsedMs <= 0)
 				continue;
@@ -151,6 +205,11 @@ class CGS_PortalMomentumService
 			desired[1] = desired[1] - state.m_fGravity * dt;
 			state.m_vVirtualVelocity = desired;
 
+			// Server keeps an approximate carried velocity for multi-portal
+			// chains; the owning client supplies actual movement in MP.
+			if (state.m_bTrackOnly)
+				continue;
+
 			// Native walking/falling movement is already being simulated.
 			// Move only by the DELTA needed to redirect it to portal velocity.
 			vector nativeVelocity = controller.GetVelocity();
@@ -165,15 +224,21 @@ class CGS_PortalMomentumService
 			vector origin = character.GetOrigin();
 			vector target = origin + correction;
 
-			// Never script a character underneath the terrain. A real
-			// grounded impact is handled by normal engine collision instead.
+			// Do not push underground, but DO allow horizontal launch
+			// corrections while feet are already at ground height. The
+			// previous implementation cancelled all momentum for a small
+			// downward component, even with a clear horizontal path.
 			float groundY = world.GetSurfaceY(target[0], target[2]);
 			if (target[1] < groundY + 0.15)
 			{
-				if (state.m_bDebug)
-					Print("[CGS MOMENTUM] Stopped: correction would enter terrain.");
-				s_aActive.RemoveOrdered(i);
-				continue;
+				if (origin[1] >= groundY + 0.15)
+					target[1] = groundY + 0.15;
+				else
+					target[1] = origin[1];
+
+				correction = target - origin;
+				if (correction.LengthSq() < 0.000016)
+					continue;
 			}
 
 			// Conservative spherical sweep around the character torso.
@@ -210,7 +275,7 @@ class CGS_PortalMomentumService
 			state.m_iTicks++;
 
 			if (state.m_bDebug && (s_iMomentumArms <= 3 || s_iMomentumArms % 10 == 0) && (state.m_iTicks == 1 || state.m_iTicks % 60 == 0))
-				PrintFormat("[CGS MOMENTUM] tick=%1 wanted=%2 controller=%3 correction=%4", state.m_iTicks, desired, nativeVelocity, correction);
+				PrintFormat("[CGS MOMENTUM MP] tick=%1 server=%2 wanted=%3 controller=%4 correction=%5", state.m_iTicks, Replication.IsServer(), desired, nativeVelocity, correction);
 		}
 	}
 }
