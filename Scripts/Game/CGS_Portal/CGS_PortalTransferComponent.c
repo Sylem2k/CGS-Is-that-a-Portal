@@ -275,6 +275,25 @@ class CGS_PortalTransferComponent : ScriptComponent
 
 		vector outgoingVelocity = exitRight * (-localSideSpeed) + exitUp * localUpSpeed - exitNormal * localForwardSpeed;
 
+		// FLOOR -> FLOOR GRAVITY LOOP: both openings point toward the sky.
+		// A real downward entry should emerge STRAIGHT UP from the other
+		// portal. Sideways samples may contain huge stale teleport deltas
+		// from offline/MP character interpolation; do not turn those into
+		// sideways rocket velocity. The subsequent fall is handled by
+		// normal gravity, and the *same destination* portal catches that
+		// character only after it has passed its apex and descended.
+		//
+		// Walking onto a floor portal still teleports, but never converts
+		// horizontal walking/network speed into a vertical launch.
+		bool verticalLoop = sourceNormal[1] > 0.75 && exitNormal[1] > 0.75;
+		if (verticalLoop)
+		{
+			float downwardEntrySpeed = -incomingVelocity[1];
+			outgoingVelocity = vector.Zero;
+			if (downwardEntrySpeed >= 0.75)
+				outgoingVelocity = Vector(0, downwardEntrySpeed, 0);
+		}
+
 		// Each exit has its OWN multiplier. Blue -> Orange uses Orange's
 		// multiplier; Orange -> Blue uses Blue's. A chained loop can
 		// compound actual speed, with the existing max exit speed cap.
@@ -303,6 +322,11 @@ class CGS_PortalTransferComponent : ScriptComponent
 		float outputSpeed = outgoingVelocity.Length();
 		if (maxSpeed > 0 && outputSpeed > maxSpeed)
 			outgoingVelocity = outgoingVelocity * (maxSpeed / outputSpeed);
+
+		if (verticalLoop && (source.IsDebugEnabled() || destination.IsDebugEnabled()))
+			PrintFormat("[CGS PORTAL VERTICAL LOOP] player=%1 incoming=%2m/s downward=%3m/s outgoingUp=%4m/s blueOrange=%5>%6",
+				playerId, incomingVelocity.Length(), -incomingVelocity[1],
+				outgoingVelocity[1], source.GetPortalID(), destination.GetPortalID());
 
 		if (source.IsDebugEnabled() || destination.IsDebugEnabled())
 			PrintFormat("[CGS PORTAL SPEED MULTIPLIER] player=%1 entry=%2m/s exit=%3m/s exitColor=%4 multiplier=%5 minimum=%6 cap=%7",
@@ -350,6 +374,19 @@ class CGS_PortalTransferComponent : ScriptComponent
 				gameEntity.Teleport(characterMatrix);
 			else
 				character.SetWorldTransform(characterMatrix);
+		}
+
+		// Workbench/offline host is also the predicted character owner.
+		// The server helper may accept a teleport but leave the LOCAL
+		// character in the old floor portal. Mirror the same validated
+		// position through the local-player helper (as the working MP
+		// Owner RPC does for remote clients) before arming momentum.
+		if (safeMode && !Replication.IsRunning() && SCR_PlayerController.GetLocalPlayerId() == playerId)
+		{
+			bool hostMoved = SCR_Global.TeleportLocalPlayer(destinationPosition);
+			if (source.IsDebugEnabled() || destination.IsDebugEnabled())
+				PrintFormat("[CGS PORTAL HOST TELEPORT] player=%1 accepted=%2 exit=%3 after=%4",
+					playerId, hostMoved, destinationPosition, character.GetOrigin());
 		}
 
 		// A successful TeleportPlayer() call does not by itself prove
