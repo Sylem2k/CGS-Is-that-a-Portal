@@ -181,7 +181,8 @@ class CGS_PortalTransferComponent : ScriptComponent
 			if (!SCR_Global.TeleportPlayer(playerId, destinationPosition))
 			{
 				if (source.IsDebugEnabled() || destination.IsDebugEnabled())
-					PrintFormat("[CGS PORTAL PHYSICS] SAFE teleport rejected for player=%1 exit=%2", playerId, destinationPosition);
+					PrintFormat("[CGS PORTAL MP REJECT] SAFE teleport failed player=%1 exit=%2 serverPlayer=%3",
+						playerId, destinationPosition, GetGame().GetPlayerManager().GetPlayerControlledEntity(playerId));
 				return false;
 			}
 		}
@@ -192,6 +193,16 @@ class CGS_PortalTransferComponent : ScriptComponent
 				gameEntity.Teleport(characterMatrix);
 			else
 				character.SetWorldTransform(characterMatrix);
+		}
+
+		// A successful TeleportPlayer() call does not by itself prove
+		// that a remote client's predicted position remained at the exit.
+		// This is the immediate authoritative server position only.
+		if (source.IsDebugEnabled() || destination.IsDebugEnabled())
+		{
+			PrintFormat("[CGS PORTAL MP MOVE] player=%1 safeMode=%2 requestedExit=%3 serverAfter=%4 displacement=%5",
+				playerId, safeMode, destinationPosition, character.GetOrigin(),
+				vector.Distance(character.GetOrigin(), destinationPosition));
 		}
 
 		bool velocityApplied = false;
