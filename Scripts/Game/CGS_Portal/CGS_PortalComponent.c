@@ -595,6 +595,16 @@ class CGS_PortalComponent : ScriptComponent
 				continue;
 			}
 
+			// The server may still see the player moving into this old
+			// SOURCE portal for several frames after a successful
+			// dedicated-MP transfer. Hold re-entry until the original
+			// entrance is cleared, rather than issuing duplicate Owner RPCs.
+			if (CGS_PortalTransferComponent.IsSourceEntrySuppressed(character, this))
+			{
+				m_mPreviousPositions.Set(character, currentPos);
+				continue;
+			}
+
 			bool shouldTransfer = false;
 			string entryMode = "PLANE";
 
