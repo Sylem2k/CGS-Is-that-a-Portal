@@ -159,6 +159,21 @@ class CGS_PortalTransferComponent : ScriptComponent
 			speedMultiplier = 0;
 		outgoingVelocity = outgoingVelocity * speedMultiplier;
 
+		// Optional trap launch: push even slow walkers out of a portal
+		// while retaining the entry vector for genuinely fast arrivals.
+		float minimumSpeed = destination.GetMinimumExitSpeed();
+		if (minimumSpeed > 100)
+			minimumSpeed = 100;
+		float currentSpeed = outgoingVelocity.Length();
+		if (minimumSpeed > 0 && currentSpeed < minimumSpeed)
+		{
+			vector exitDirection = exitNormal;
+			if (currentSpeed > 0.1)
+				exitDirection = outgoingVelocity / currentSpeed;
+
+			outgoingVelocity = exitDirection * minimumSpeed;
+		}
+
 		float maxSpeed = destination.GetMaxExitSpeed();
 		float outputSpeed = outgoingVelocity.Length();
 		if (maxSpeed > 0 && outputSpeed > maxSpeed)
@@ -215,7 +230,12 @@ class CGS_PortalTransferComponent : ScriptComponent
 			SCR_PlayerController playerController = SCR_PlayerController.Cast(ownerController);
 			if (playerController)
 			{
-				playerController.CGS_ServerSendPortalTeleportToOwner(destinationPosition);
+				playerController.CGS_ServerSendPortalTeleportToOwner(
+					destinationPosition, outgoingVelocity,
+					destination.GetMomentumCarrySeconds(),
+					destination.GetMomentumGravity(),
+					destination.GetMomentumMaxStep(),
+					destination.ShouldSimulateMomentum());
 			}
 			else if (source.IsDebugEnabled() || destination.IsDebugEnabled())
 			{
@@ -243,7 +263,8 @@ class CGS_PortalTransferComponent : ScriptComponent
 				destination.GetMomentumCarrySeconds(),
 				destination.GetMomentumGravity(),
 				destination.GetMomentumMaxStep(),
-				source.IsDebugEnabled() || destination.IsDebugEnabled()
+				source.IsDebugEnabled() || destination.IsDebugEnabled(),
+				Replication.IsRunning() && SCR_PlayerController.GetLocalPlayerId() != playerId
 			);
 		}
 		else
