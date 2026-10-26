@@ -16,6 +16,7 @@ class CGS_PortalMomentumState : Managed
 	IEntity m_Character;
 	vector m_vVirtualVelocity;
 	int m_iLastTickMs;
+	int m_iArmedAtMs;
 	int m_iExpireMs;
 	float m_fGravity;
 	float m_fMaxStep;
@@ -45,6 +46,37 @@ class CGS_PortalMomentumService
 		}
 
 		return fallback;
+	}
+
+	// Retain the server-side exit velocity from the last portal jump.
+	// This is needed because a dedicated server can briefly observe a
+	// smaller, interpolated speed than the owning client's launched speed.
+	// Only fresh entries qualify; no indefinite accumulation while idle.
+	static bool TryGetStackedVelocity(IEntity character, float windowSeconds, out vector stackedVelocity)
+	{
+		stackedVelocity = vector.Zero;
+		if (!Replication.IsServer() || !GetGame() || !GetGame().GetWorld() || !character)
+			return false;
+
+		if (windowSeconds <= 0)
+			return false;
+		if (windowSeconds > 15)
+			windowSeconds = 15;
+
+		int now = GetGame().GetWorld().GetWorldTime();
+		int windowMs = Math.Round(windowSeconds * 1000);
+		foreach (CGS_PortalMomentumState state : s_aActive)
+		{
+			if (!state || state.m_Character != character)
+				continue;
+			if (now >= state.m_iExpireMs || now - state.m_iArmedAtMs > windowMs)
+				return false;
+
+			stackedVelocity = state.m_vVirtualVelocity;
+			return stackedVelocity.LengthSq() > 0.01;
+		}
+
+		return false;
 	}
 
 	static void Stop(IEntity character)
@@ -103,6 +135,7 @@ class CGS_PortalMomentumService
 		state.m_Character = character;
 		state.m_vVirtualVelocity = wantedVelocity;
 		state.m_iLastTickMs = now;
+		state.m_iArmedAtMs = now;
 		state.m_iExpireMs = now + Math.Round(durationSeconds * 1000);
 		state.m_fGravity = gravity;
 		state.m_fMaxStep = maxStep;
