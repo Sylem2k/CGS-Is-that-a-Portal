@@ -126,6 +126,10 @@ class CGS_PortalComponent : ScriptComponent
 
 	protected int m_iSuccessfulTransfers;
 
+	// Dedicated-server MP diagnostics: throttled per portal, never per-frame spam.
+	protected int m_iLastMPPairProbeMs = -10000;
+	protected int m_iLastMPNearbyProbeMs = -10000;
+
 	protected ref map<IEntity, vector> m_mPreviousPositions = new map<IEntity, vector>();
 
 	// Debug each wall approach at most once every 1.5 seconds per player.
@@ -411,7 +415,23 @@ class CGS_PortalComponent : ScriptComponent
 
 		CGS_PortalComponent partner = CGS_PortalManagerComponent.GetPartner(this);
 		if (!partner || !partner.IsPortalEnabled())
-			return;
+		{
+			// PIP links portals locally via replicated owner IDs, but
+			// physical transfer requires the SERVER's own pair registry.
+			// Re-register on a throttled basis to repair stale pair state.
+			int pairProbeNow = GetGame().GetWorld().GetWorldTime();
+			if (pairProbeNow - m_iLastMPPairProbeMs >= 4000)
+			{
+				m_iLastMPPairProbeMs = pairProbeNow;
+				CGS_PortalManagerComponent.RegisterPortal(this);
+				partner = CGS_PortalManagerComponent.GetPartner(this);
+				if (m_bDebug)
+					PrintFormat("[CGS PORTAL MP LINK] owner=%1 color=%2 enabled=%3 partner=%4 partnerEnabled=%5",
+						m_iPortalOwnerID, m_iPortalID, m_bEnabled, partner, partner && partner.IsPortalEnabled());
+			}
+			if (!partner || !partner.IsPortalEnabled())
+				return;
+		}
 
 		PlayerManager playerManager = GetGame().GetPlayerManager();
 		if (!playerManager)
@@ -434,6 +454,23 @@ class CGS_PortalComponent : ScriptComponent
 				continue;
 
 			vector currentPos = character.GetOrigin();
+
+			// Show whether the dedicated server can see a remote player's
+			// character standing near the portal. If cameras are live but
+			// this log never appears, the fault precedes the teleport call.
+			if (m_bDebug && vector.DistanceSq(owner.GetOrigin(), currentPos) <= 25)
+			{
+				int nearNow = GetGame().GetWorld().GetWorldTime();
+				if (nearNow - m_iLastMPNearbyProbeMs >= 2500)
+				{
+					m_iLastMPNearbyProbeMs = nearNow;
+					vector nearOffset = currentPos - portalTransform[3];
+					PrintFormat("[CGS PORTAL MP NEAR] portalOwner=%1 color=%2 player=%3 range=%4 depth=%5 side=%6 up=%7 pairColor=%8",
+						m_iPortalOwnerID, m_iPortalID, playerId, vector.Distance(currentPos, owner.GetOrigin()),
+						vector.Dot(nearOffset, portalNormal), vector.Dot(nearOffset, portalRight),
+						vector.Dot(nearOffset, portalUp), partner.GetPortalID());
+				}
+			}
 
 			// The portal that the player JUST emerged from must not
 			// immediately grab them again. In particular, Orange's
@@ -609,7 +646,14 @@ class CGS_PortalComponent : ScriptComponent
 			if (!shouldTransfer)
 				continue;
 
-			if (CGS_PortalTransferComponent.TryTransfer(character, this, partner, playerId))
+			// An entry was detected. Log this once per attempted crossing,
+			// even if TryTransfer rejects it (e.g. destination outside map).
+			bool transferSucceeded = CGS_PortalTransferComponent.TryTransfer(character, this, partner, playerId);
+			if (m_bDebug)
+				PrintFormat("[CGS PORTAL MP ATTEMPT] owner=%1 player=%2 color=%3 partner=%4 entry=%5 success=%6 actualPosition=%7",
+					m_iPortalOwnerID, playerId, m_iPortalID, partner.GetPortalID(), entryMode, transferSucceeded, character.GetOrigin());
+
+			if (transferSucceeded)
 			{
 				m_iSuccessfulTransfers++;
 				if (m_bDebug && (m_iSuccessfulTransfers <= 3 || m_iSuccessfulTransfers % 10 == 0))
