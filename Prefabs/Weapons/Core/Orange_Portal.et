@@ -30,6 +30,8 @@ GenericEntity {
    m_bUseSafePlayerTeleport 1
    m_bPreserveMomentum 1
    m_fMomentumMultiplier 1.5
+   m_bStackMomentum 1
+   m_fMomentumStackWindow 4
    m_fMinimumExitSpeed 0
    m_fMaxExitSpeed 80
    m_bSimulateMomentum 1
