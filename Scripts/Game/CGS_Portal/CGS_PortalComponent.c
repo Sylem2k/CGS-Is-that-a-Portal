@@ -97,6 +97,11 @@ class CGS_PortalComponent : ScriptComponent
 	[Attribute("1.0", UIWidgets.EditBox, "EXPERIMENT: exit velocity multiplier")]
 	protected float m_fMomentumMultiplier;
 
+	// Trap builder: allow launches even from a slow walk. 0 = stock
+	// momentum conservation, so existing portals behave the same.
+	[Attribute("0", UIWidgets.EditBox, "Trap launch: MINIMUM exit speed in m/s; 0 = inherit speed only")]
+	protected float m_fMinimumExitSpeed;
+
 	[Attribute("45", UIWidgets.EditBox, "EXPERIMENT: max exit speed in m/s; 0 means uncapped")]
 	protected float m_fMaxExitSpeed;
 
@@ -705,6 +710,11 @@ class CGS_PortalComponent : ScriptComponent
 	float GetMaxExitSpeed()
 	{
 		return m_fMaxExitSpeed;
+	}
+
+	float GetMinimumExitSpeed()
+	{
+		return m_fMinimumExitSpeed;
 	}
 
 	bool ShouldSimulateMomentum()
