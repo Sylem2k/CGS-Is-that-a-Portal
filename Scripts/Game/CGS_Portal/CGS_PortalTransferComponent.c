@@ -179,6 +179,18 @@ class CGS_PortalTransferComponent : ScriptComponent
 		if (maxSpeed > 0 && outputSpeed > maxSpeed)
 			outgoingVelocity = outgoingVelocity * (maxSpeed / outputSpeed);
 
+		// Fall-to-launch diagnostic: falling into an upward-facing floor
+		// portal should come OUT of the destination along its normal
+		// with equivalent speed, unless its max cap is reached.
+		// Measure controller and carried velocity BEFORE teleport
+		// because SCR_Global.TeleportPlayer resets native velocity.
+		if ((source.IsDebugEnabled() || destination.IsDebugEnabled()) && sourceNormal[1] > 0.75 && controller.IsFalling())
+		{
+			PrintFormat("[CGS PORTAL FALL LAUNCH] player=%1 controllerVelocity=%2 incomingVelocity=%3 fallSpeed=%4 exitVelocity=%5 exitSpeed=%6 maxExitSpeed=%7 exitNormal=%8",
+				playerId, controllerVelocity, incomingVelocity, -incomingVelocity[1],
+				outgoingVelocity, outgoingVelocity.Length(), maxSpeed, exitNormal);
+		}
+
 		// Use Reforger's engine-supported entity teleport path rather than
 		// SetOrigin alone. Keep the character upright and retain current yaw
 		// until orientation/controller replication has been verified.
