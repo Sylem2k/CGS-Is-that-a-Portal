@@ -202,6 +202,11 @@ class CGS_PortalTransferComponent : ScriptComponent
 		if (maxSpeed > 0 && outputSpeed > maxSpeed)
 			outgoingVelocity = outgoingVelocity * (maxSpeed / outputSpeed);
 
+		if (source.IsDebugEnabled() || destination.IsDebugEnabled())
+			PrintFormat("[CGS PORTAL SPEED MULTIPLIER] player=%1 entry=%2m/s exit=%3m/s exitColor=%4 multiplier=%5 minimum=%6 cap=%7",
+				playerId, incomingVelocity.Length(), outgoingVelocity.Length(),
+				destination.GetPortalID(), speedMultiplier, minimumSpeed, maxSpeed);
+
 		// Fall-to-launch diagnostic: falling into an upward-facing floor
 		// portal should come OUT of the destination along its normal
 		// with equivalent speed, unless its max cap is reached.
