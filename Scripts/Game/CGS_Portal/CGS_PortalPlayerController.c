@@ -6,6 +6,13 @@ modded class SCR_PlayerController
 	protected bool m_bCGSInputContextReported;
 	protected bool m_bCGSPinkWasPrimaryHeld;
 
+	// Phase 1 physics grab; isolated from both Blue/Orange firing actions.
+	protected bool m_bCGSGrabKeyHeld;
+	protected int m_iCGSLastGrabAimMs;
+	// Server-side only: remember the exact gun used for this grab so
+	// a release still works after the player changes their active weapon.
+	protected CGS_GrabGunComponent m_pCGSServerGrabGun;
+
 	override void OnUpdate(float timeSlice)
 	{
 		super.OnUpdate(timeSlice);
@@ -28,6 +35,12 @@ modded class SCR_PlayerController
 		CGS_PinkGunComponent equippedPinkGun = CGS_GetEquippedPinkGun();
 		if (equippedPinkGun)
 		{
+			if (m_bCGSGrabKeyHeld)
+			{
+				CGS_RequestGrabRelease();
+				m_bCGSGrabKeyHeld = false;
+			}
+
 			bool pinkPressed = primaryHeld && !m_bCGSPinkWasPrimaryHeld;
 			m_bCGSPinkWasPrimaryHeld = primaryHeld;
 
@@ -50,6 +63,12 @@ modded class SCR_PlayerController
 		CGS_PortalGunComponent equippedGun = CGS_GetEquippedPortalGun();
 		if (!equippedGun || GetGame().GetMenuManager().IsAnyMenuOpen())
 		{
+			if (m_bCGSGrabKeyHeld)
+			{
+				CGS_RequestGrabRelease();
+				m_bCGSGrabKeyHeld = false;
+			}
+
 			m_bCGSWasPrimaryHeld = primaryHeld;
 			m_bCGSWasSecondaryHeld = false;
 			m_bCGSInputContextReported = false;
@@ -81,6 +100,29 @@ modded class SCR_PlayerController
 
 		m_bCGSWasPrimaryHeld = primaryHeld;
 		m_bCGSWasSecondaryHeld = secondaryHeld;
+
+		// HOLD G = pull/hold, RELEASE G = drop. This action has no
+		// InputFilterPressed; GetActionValue remains active while held.
+		bool grabHeld = inputManager.GetActionValue("CGSPortalGunGrab") > 0.5;
+		if (grabHeld)
+		{
+			int nowMs = GetGame().GetWorld().GetWorldTime();
+			if (!m_bCGSGrabKeyHeld || nowMs - m_iCGSLastGrabAimMs >= 125)
+			{
+				vector grabCamera[4];
+				GetGame().GetWorld().GetCurrentCamera(grabCamera);
+				if (!m_bCGSGrabKeyHeld)
+					CGS_RequestGrabStart(grabCamera[3], grabCamera[2]);
+				else
+					CGS_RequestGrabAim(grabCamera[3], grabCamera[2]);
+				m_iCGSLastGrabAimMs = nowMs;
+			}
+		}
+		else if (m_bCGSGrabKeyHeld)
+		{
+			CGS_RequestGrabRelease();
+		}
+		m_bCGSGrabKeyHeld = grabHeld;
 
 		if (!primaryPressed && !secondaryPressed)
 			return;
@@ -275,6 +317,75 @@ modded class SCR_PlayerController
 			return "{6AB2F1A0000004B0}Prefabs/Characters/Heads/CGS_Head_White_10_Pink.et";
 
 		return "";
+	}
+
+	// GRAB PHASE 1: server-validated ray selection + short aim updates.
+	// The server never accepts client-provided target entity IDs.
+	protected CGS_GrabGunComponent CGS_GetEquippedGrabGun()
+	{
+		CGS_PortalGunComponent portalGun = CGS_GetEquippedPortalGun();
+		if (!portalGun || !portalGun.GetOwner())
+			return null;
+
+		return CGS_GrabGunComponent.Cast(portalGun.GetOwner().FindComponent(CGS_GrabGunComponent));
+	}
+
+	protected void CGS_RequestGrabStart(vector cameraOrigin, vector cameraForward)
+	{
+		if (Replication.IsServer())
+			RpcAsk_CGSGrabStart(cameraOrigin, cameraForward);
+		else
+			Rpc(RpcAsk_CGSGrabStart, cameraOrigin, cameraForward);
+	}
+
+	[RplRpc(RplChannel.Reliable, RplRcver.Server)]
+	protected void RpcAsk_CGSGrabStart(vector cameraOrigin, vector cameraForward)
+	{
+		if (!Replication.IsServer())
+			return;
+
+		CGS_GrabGunComponent gun = CGS_GetEquippedGrabGun();
+		if (!gun)
+			return;
+
+		if (gun.ServerStartGrab(this, cameraOrigin, cameraForward))
+			m_pCGSServerGrabGun = gun;
+	}
+
+	protected void CGS_RequestGrabAim(vector cameraOrigin, vector cameraForward)
+	{
+		if (Replication.IsServer())
+			RpcAsk_CGSGrabAim(cameraOrigin, cameraForward);
+		else
+			Rpc(RpcAsk_CGSGrabAim, cameraOrigin, cameraForward);
+	}
+
+	// A lost aim packet is harmless; the next one updates hold position.
+	[RplRpc(RplChannel.Unreliable, RplRcver.Server)]
+	protected void RpcAsk_CGSGrabAim(vector cameraOrigin, vector cameraForward)
+	{
+		if (!Replication.IsServer() || !m_pCGSServerGrabGun)
+			return;
+
+		m_pCGSServerGrabGun.ServerUpdateGrabAim(this, cameraOrigin, cameraForward);
+	}
+
+	protected void CGS_RequestGrabRelease()
+	{
+		if (Replication.IsServer())
+			RpcAsk_CGSGrabRelease();
+		else
+			Rpc(RpcAsk_CGSGrabRelease);
+	}
+
+	[RplRpc(RplChannel.Reliable, RplRcver.Server)]
+	protected void RpcAsk_CGSGrabRelease()
+	{
+		if (!Replication.IsServer() || !m_pCGSServerGrabGun)
+			return;
+
+		m_pCGSServerGrabGun.ServerReleaseGrab(GetPlayerId());
+		m_pCGSServerGrabGun = null;
 	}
 
 	// PORTAL MP: Reforger characters are client-predicted.
