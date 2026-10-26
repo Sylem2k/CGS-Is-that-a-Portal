@@ -30,11 +30,12 @@ GenericEntity {
    m_bUseSafePlayerTeleport 1
    m_bPreserveMomentum 1
    m_fMomentumMultiplier 1
-   m_fMaxExitSpeed 30
+   m_fMinimumExitSpeed 16
+   m_fMaxExitSpeed 80
    m_bSimulateMomentum 1
-   m_fMomentumCarrySeconds 4
+   m_fMomentumCarrySeconds 7
    m_fMomentumGravity 9.81
-   m_fMomentumMaxStep 0.7
+   m_fMomentumMaxStep 2
   }
   RplComponent "{6AB20E69F5EA96AD}" {
    "Rpl State Override" Runtime

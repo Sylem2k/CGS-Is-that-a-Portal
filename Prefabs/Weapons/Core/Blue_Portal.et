@@ -22,19 +22,20 @@ GenericEntity {
    m_fWallEntryHeightOffset 0.85
    m_fWallEntryEdgePadding 0.35
    m_bWallEntryBothSides 1
-   m_bFallCatchAssist 0
-   m_fFallCatchHeight 3.5
-   m_fFallCatchHalfWidth 5
-   m_fFallCatchHalfLength 5
+   m_bFallCatchAssist 1
+   m_fFallCatchHeight 2
+   m_fFallCatchHalfWidth 2
+   m_fFallCatchHalfLength 2.4
    m_fExitLateralScale 0
    m_bUseSafePlayerTeleport 1
    m_bPreserveMomentum 1
    m_fMomentumMultiplier 1
-   m_fMaxExitSpeed 30
+   m_fMinimumExitSpeed 0
+   m_fMaxExitSpeed 80
    m_bSimulateMomentum 1
-   m_fMomentumCarrySeconds 4
+   m_fMomentumCarrySeconds 7
    m_fMomentumGravity 9.81
-   m_fMomentumMaxStep 0.7
+   m_fMomentumMaxStep 2
   }
   // Visual PIP is client-local only; server teleporting is unchanged.
   // Two nearest eligible portal views share camera slots 26/27 per client.
