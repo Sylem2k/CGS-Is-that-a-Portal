@@ -135,6 +135,13 @@ GenericEntity {
    m_iShotCooldownMs 200
    m_bDebug 1
   }
+  CGS_GrabGunComponent "{6AB21D161F2E75A2}" {
+   m_fGrabRange 8
+   m_fBreakDistance 12
+   m_fPullResponse 8
+   m_fMaxHoldSpeed 15
+   m_bDebug 1
+  }
   NwkPhysicsMovementComponent "{6AB21D161F2E7321}" {
   }
   RplComponent "{6AB21D161F2E7324}" {
