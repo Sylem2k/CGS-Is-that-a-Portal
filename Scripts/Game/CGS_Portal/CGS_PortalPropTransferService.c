@@ -198,7 +198,10 @@ class CGS_PortalPropTransferService
 				continue;
 			}
 
-			if (source.IsDebugEnabled() || destination.IsDebugEnabled())
+			// An independent gun tracker and the prop's own EOnFrame
+			// both call this service. Suppress duplicate per-frame
+			// candidate spam; failures still show ERROR/BLOCKED.
+			if ((source.IsDebugEnabled() || destination.IsDebugEnabled()) && grabbable.ShouldLogPortalWatch(nowMs))
 				PrintFormat("[CGS PORTAL PROP CANDIDATE] source=%1 exit=%2 depth=%3 predicted=%4 contact=%5 side=%6 up=%7",
 					source.GetPortalID(), destination.GetPortalID(), currentDepth, projectedEntry, rememberedContact, predictedSide, predictedUp);
 
@@ -321,23 +324,43 @@ class CGS_PortalPropTransferService
 			PrintFormat("[CGS PORTAL PROP OFFSET] exitColor=%1 lane=%2 position=%3 (center blocked by character)",
 				destination.GetPortalID(), chosenOffset, exitPosition);
 
-		BaseGameEntity gameProp = BaseGameEntity.Cast(prop);
-		if (!gameProp)
+		// IMPORTANT: The existing cube prefab is a GENERIC ENTITY,
+		// not BaseGameEntity. Earlier versions silently returned at
+		// BaseGameEntity.Cast(prop), AFTER successfully detecting entry,
+		// which is why CANDIDATE logs appeared without BLOCKED or PROP.
+		// GenericEntity.SetOrigin is valid on the actual replicated cube
+		// and keeps its current orientation (only position is changed).
+		GenericEntity genericProp = GenericEntity.Cast(prop);
+		if (!genericProp)
+		{
+			PrintFormat("[CGS PORTAL PROP ERROR] Cannot move unexpected entity type=%1 source=%2 exit=%3",
+				prop, source.GetPortalID(), destination.GetPortalID());
 			return false;
+		}
 
-		vector matrix[4];
-		prop.GetWorldTransform(matrix);
-		matrix[3] = exitPosition;
-		gameProp.Teleport(matrix);
+		vector beforePosition = prop.GetOrigin();
+		genericProp.SetOrigin(exitPosition);
 
-		// A dynamic rigidbody is server-simulated and its network physics
-		// movement component replicates the resulting motion to clients.
+		// Explicitly confirm the move before applying outward impulse.
+		// Otherwise the cube could accelerate at its ORIGINAL location
+		// and the log would incorrectly claim a successful teleport.
+		vector afterPosition = prop.GetOrigin();
+		float remainingError = vector.DistanceSq(afterPosition, exitPosition);
+		if (remainingError > 0.25)
+		{
+			PrintFormat("[CGS PORTAL PROP ERROR] SetOrigin failed: prop=%1 before=%2 requested=%3 actual=%4 errorSq=%5",
+				prop, beforePosition, exitPosition, afterPosition, remainingError);
+			return false;
+		}
+
+		// Dynamic rigidbody and NwkPhysicsMovementComponent are already
+		// present on the cube. Authority stays with the game server.
 		physics.SetVelocity(outgoing);
-
 		grabbable.ServerRecordPortalExit(destination, nowMs);
+
 		if (source.IsDebugEnabled() || destination.IsDebugEnabled())
-			PrintFormat("[CGS PORTAL PROP] prop=%1 source=%2 exit=%3 requested=%4 actual=%5 incoming=%6 outgoing=%7 floorSlide=%8",
-				prop, source.GetPortalID(), destination.GetPortalID(), exitPosition, prop.GetOrigin(), incoming, outgoing, floorSlide);
+			PrintFormat("[CGS PORTAL PROP] source=%1 exit=%2 requested=%3 actual=%4 incoming=%5 outgoing=%6 floorSlide=%7",
+				source.GetPortalID(), destination.GetPortalID(), exitPosition, prop.GetOrigin(), incoming, outgoing, floorSlide);
 		return true;
 	}
 }
