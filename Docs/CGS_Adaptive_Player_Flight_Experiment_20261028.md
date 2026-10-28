@@ -1,6 +1,31 @@
 # Adaptive Player Flight — Offline Workbench Experiment (2026-10-28)
 
-**Status: uncompiled draft. NOT verified smooth, NOT a native character-controller flight mode.**
+## Runtime result — merged PR #68, verified 2026-10-28 06:42
+
+**The code compiled and the experimental adaptive option ran successfully
+in offline Workbench** using `Pasted text(20261028-064258).txt`
+(981 lines). I recorded 108/108 accepted movement requests and
+108/108 `moved=1` verifications, all `adaptive=1`, with **no**
+automatic fallbacks, refusals, or floor-loop cancellations. The
+confirmation latency was 18–50ms (28.5ms average), requested upward
+steps 0.06–0.26m, 8 real ascent apexes and 7 consecutive successful
+`FALL_ZONE` return transfers (0.833–1.098m from the portal face).
+The last apex ends with a manual Workbench reload, not a failed return.
+Both live PIP cameras remained active and in their original camera
+slots until that reload, confirming the PR #67 rank-swap mitigation
+in this test.
+
+The 7m/s launch cap produces around **2.02–2.06m observed vertical
+rise** rather than the **2.50m ballistic ideal**. This discrepancy
+needs attention in the next movement architecture, without
+destabilizing proven portal transfers.
+
+**Do not equate logged movement success with a smooth camera.**
+This log has no new gameplay recording, and even adaptive mode uses
+separate local teleports. Native continuous character flight and a
+water-like portal aperture are separate, unverified goals.
+
+**Status: movement verified in offline Workbench after merge; visual smoothness unverified. NOT a native character-controller flight mode.**
 
 ## Goal
 
