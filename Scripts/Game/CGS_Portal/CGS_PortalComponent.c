@@ -87,6 +87,21 @@ class CGS_PortalComponent : ScriptComponent
 	[Attribute("1.0", UIWidgets.EditBox, "Exit lateral offset scale: 1=physical position, 0=center of exit portal")]
 	protected float m_fExitLateralScale;
 
+	// Offline experimental prototype: only when BOTH linked portals face
+	// upward. Other portal orientations keep the reliable teleport-only
+	// behavior; dedicated MP remains completely unchanged.
+	[Attribute("0", UIWidgets.CheckBox, "OFFLINE TEST: floor-to-floor gravity bounce for players")]
+	protected bool m_bFloorGravityLoop;
+
+	[Attribute("4.5", UIWidgets.EditBox, "Floor loop minimum upward exit speed (m/s)")]
+	protected float m_fFloorLoopMinSpeed;
+
+	[Attribute("7", UIWidgets.EditBox, "Floor loop maximum upward exit speed (m/s)")]
+	protected float m_fFloorLoopMaxSpeed;
+
+	[Attribute("1.5", UIWidgets.EditBox, "Floor loop safety timeout in seconds (maximum 2)")]
+	protected float m_fFloorLoopTimeout;
+
 	[Attribute("1", UIWidgets.CheckBox, "Safe player teleport: use Reforger SCR_Global.TeleportPlayer (resets velocity)")]
 	protected bool m_bUseSafePlayerTeleport;
 
@@ -166,6 +181,26 @@ class CGS_PortalComponent : ScriptComponent
 	bool IsDebugEnabled()
 	{
 		return m_bDebug;
+	}
+
+	bool IsFloorGravityLoopEnabled()
+	{
+		return m_bFloorGravityLoop;
+	}
+
+	float GetFloorLoopMinSpeed()
+	{
+		return Math.Clamp(m_fFloorLoopMinSpeed, 2.0, 6.0);
+	}
+
+	float GetFloorLoopMaxSpeed()
+	{
+		return Math.Clamp(m_fFloorLoopMaxSpeed, GetFloorLoopMinSpeed(), 9.0);
+	}
+
+	float GetFloorLoopTimeout()
+	{
+		return Math.Clamp(m_fFloorLoopTimeout, 0.4, 2.0);
 	}
 
 	int GetPortalOwnerID()
