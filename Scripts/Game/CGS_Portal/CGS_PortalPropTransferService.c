@@ -128,9 +128,12 @@ class CGS_PortalPropTransferService
 			{
 				if ((source.IsDebugEnabled() || destination.IsDebugEnabled()) &&
 					grabbable.ShouldLogPortalWatch(nowMs))
-					PrintFormat("[CGS PORTAL PROP CHECK] source=%1 prop=%2 depth=%3 prevDepth=%4 side=%5 up=%6 prevOutside=%7 currentInside=%8 closing=%9 velocity=%10 floorNormalY=%11",
-						source.GetPortalID(), prop, currentDepth, previousDepth, currentSide, currentUp,
-						previousOutside, currentInside, closingSpeed, velocity, sourceNormal[1]);
+				{
+					PrintFormat("[CGS PORTAL PROP CHECK] color=%1 prop=%2 depth=%3 side=%4 up=%5 closing=%6 velocity=%7 normalY=%8",
+						source.GetPortalID(), prop, currentDepth, currentSide, currentUp, closingSpeed, velocity, sourceNormal[1]);
+					PrintFormat("[CGS PORTAL PROP GATES] color=%1 prevDepth=%2 prevOutside=%3 currentInside=%4",
+						source.GetPortalID(), previousDepth, previousOutside, currentInside);
+				}
 				continue;
 			}
 
