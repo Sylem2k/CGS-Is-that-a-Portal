@@ -151,6 +151,11 @@ class CGS_GrabbableComponent : ScriptComponent
 		m_iApproachExpiresMs = nowMs + 450;
 	}
 
+	bool ServerHasRecentPortalApproach(int nowMs)
+	{
+		return Replication.IsServer() && m_pApproachPortal && nowMs <= m_iApproachExpiresMs;
+	}
+
 	bool ServerGetRecentPortalApproach(CGS_PortalComponent source, int nowMs, out vector incoming)
 	{
 		incoming = vector.Zero;
