@@ -38,6 +38,11 @@ class CGS_PortalPropTransferService
 			if (!source || !source.GetOwner() || source.GetOwner().IsDeleted())
 				continue;
 
+			// Cheap 6m broad phase prevents scanning hundreds of remote
+			// player-owned portal pairs in full for every physics prop.
+			if (vector.DistanceSq(source.GetOwner().GetOrigin(), currentPos) > 36.0)
+				continue;
+
 			CGS_PortalComponent destination = CGS_PortalManagerComponent.GetPartner(source);
 			if (!destination || !destination.IsPortalEnabled() || !destination.GetOwner() || destination.GetOwner().IsDeleted())
 				continue;
