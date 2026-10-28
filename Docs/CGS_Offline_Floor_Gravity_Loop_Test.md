@@ -65,6 +65,66 @@ This fixes the confirmed **launch-start timing**, not yet complete
 three-axis portal momentum or camera orientation. The cube's working
 native-physics transfer remains unchanged.
 
+## Oct 28 06:04 follow-up: transform control after arrival
+
+The latest Workbench log proves the PR #62 timing correction worked,
+but **the actual upward launch did not**.
+
+- `[CGS FLOOR LOOP] Start AFTER ARRIVAL` occurs repeatedly.
+- `[CGS FLOOR LOOP] Apex: ... ticks=22` through `ticks=35` also occurs.
+- Example: exit requested at `Y=6.48501`, confirmed player after 350ms
+  at `Y=6.411` — **lower**, despite a requested `4.5m/s` launch.
+- The previously used `BaseGameEntity.Teleport` incremental correction
+  did not produce sustained upward travel on the locally predicted character.
+  This is a movement-controller problem, NOT an entry/exit routing problem.
+- Both portals are present; cube teleportation continues to work.
+
+### New controlled experiment
+
+This branch keeps arrival waiting from PR #62 and **changes only the
+offline floor flight position driver**, not ordinary player teleport:
+
+1. Store the actual arrival position as the launch origin.
+2. Calculate the intended height on every frame from
+   `height = originY + initialUpwardSpeed * time - 0.5 * gravity * time^2`.
+3. Move **upward only**, at most **0.28m** per frame, with a
+   0.30m-radius character-torso collision sweep. Keep X/Z and yaw free.
+4. Apply the vertical position using `IEntity.SetWorldTransform` on the
+   same locally predicted character, rather than the prior
+   `BaseGameEntity.Teleport` micro-corrections.
+5. Measure real current/after position and rate-limit
+   `[CGS FLOOR FLIGHT] tick=... plannedY=... beforeY=... afterY=...` logs.
+6. At the apex, report
+   `[CGS FLOOR LOOP] Apex: ... startY=... peakObservedY=... expectedApexY=...`
+   so we can compare **actual height gained**, not just number of ticks.
+7. Abort if movement is refused on four consecutive attempted steps;
+   do not repeatedly push into a blocked character/controller.
+
+### Verify in the actual game
+
+1. Fire both portals onto separate clear FLAT roads; stand clear of obstacles
+   and walk into one portal without pressing movement keys after transfer.
+2. Look for `[CGS FLOOR LOOP] Pending arrival`, then
+   `Start AFTER ARRIVAL`, then at least 2 `[CGS FLOOR FLIGHT]`
+   entries with `afterY > beforeY`.
+3. At `Apex`, confirm `peakObservedY > startY` by roughly **0.5 to 1.1m**
+   at 4.5m/s. Theoretical rise is ~1.03m. Player should be visibly
+   airborne; gravity should subsequently bring them down.
+4. If `afterY` rises but the next frame's `beforeY` snaps back,
+   the native character controller is overwriting direct transforms.
+   Capture those `FLOOR FLIGHT` lines: we will need to drive a dedicated
+   character-controller movement mode rather than keep applying transforms.
+5. Confirm the character can walk, exit the loop, survive contact, and
+   re-enter the other portal. Don't test multiplayer yet.
+6. If `[CGS FLOOR LOOP] Cancel: character transform refused movement`,
+   the engine is rejecting direct transform changes altogether.
+7. The existing `Not_Companion_Cube` transfer, weapons, MP modes,
+   and previous portal momentum settings are untouched.
+
+**This branch is a source-reviewed, uncompiled Workbench experiment.**
+Do not present real ballistic flight as verified until player origin logs
+and visible motion agree.
+
 ## Workbench test — player (not the cube)
 
 1. Sync test branch, compile Game scripts and load the same `unnamed.ent` test world.
