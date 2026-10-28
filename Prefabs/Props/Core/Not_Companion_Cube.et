@@ -13,6 +13,8 @@ GenericEntity {
    m_bCanBeGrabbed 1
    m_fMaxMass 100
    m_fHoldDistance 2.5
+   m_bAllowPortalTravel 1
+   m_fPortalMaxExitSpeed 25
   }
   NwkPhysicsMovementComponent "{6AB840A2F1C63212}" {
   }

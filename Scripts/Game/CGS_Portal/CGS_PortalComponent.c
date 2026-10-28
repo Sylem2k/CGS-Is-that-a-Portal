@@ -817,6 +817,18 @@ class CGS_PortalComponent : ScriptComponent
 		return m_bUseSafePlayerTeleport;
 	}
 
+	// Opt-in prop portal travel uses the SAME opening dimensions as
+	// character entry, not the oversized character fall-rescue volume.
+	float GetPortalHalfWidth()
+	{
+		return m_fHalfWidth;
+	}
+
+	float GetPortalHalfHeight()
+	{
+		return m_fHalfHeight;
+	}
+
 	float GetFrontCatchDistance()
 	{
 		return m_fFrontCatchDistance;

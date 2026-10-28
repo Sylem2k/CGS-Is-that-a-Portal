@@ -20,6 +20,11 @@ class CGS_PortalManagerComponent : ScriptComponent
 {
 	protected static CGS_PortalComponent s_BlueTest;
 	protected static CGS_PortalComponent s_OrangeTest;
+
+	// Server-side list of live portal components. Prop travel uses this
+	// registry to find nearby paired portals without searching the world.
+	// RegisterPortal may run again after ownership changes: deduplicate.
+	protected static ref array<CGS_PortalComponent> s_aActivePortals = {};
 	protected static ref map<int, ref CGS_PortalPlayerPair> s_mPlayerPairs = new map<int, ref CGS_PortalPlayerPair>();
 	protected static int s_iLastCleanupMs = -1;
 
@@ -27,6 +32,9 @@ class CGS_PortalManagerComponent : ScriptComponent
 	{
 		if (!portal)
 			return;
+
+		if (!s_aActivePortals.Contains(portal))
+			s_aActivePortals.Insert(portal);
 
 		int portalId = portal.GetPortalID();
 		int ownerId = portal.GetPortalOwnerID();
@@ -60,6 +68,8 @@ class CGS_PortalManagerComponent : ScriptComponent
 		if (!portal)
 			return;
 
+		s_aActivePortals.RemoveItem(portal);
+
 		if (s_BlueTest == portal)
 			s_BlueTest = null;
 		if (s_OrangeTest == portal)
@@ -80,6 +90,20 @@ class CGS_PortalManagerComponent : ScriptComponent
 
 		if (!pair.m_Blue && !pair.m_Orange)
 			s_mPlayerPairs.Remove(ownerId);
+	}
+
+	// Caller passes an empty temporary array. List is server-local;
+	// nothing is replicated or exposed to remote clients.
+	static void GetActivePortals(array<CGS_PortalComponent> portals)
+	{
+		if (!portals || !Replication.IsServer())
+			return;
+
+		foreach (CGS_PortalComponent portal : s_aActivePortals)
+		{
+			if (portal && portal.GetOwner() && !portal.GetOwner().IsDeleted() && portal.IsPortalEnabled())
+				portals.Insert(portal);
+		}
 	}
 
 	static CGS_PortalComponent GetPartner(CGS_PortalComponent portal)
