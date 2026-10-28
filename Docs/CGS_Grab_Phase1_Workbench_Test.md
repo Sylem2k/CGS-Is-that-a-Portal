@@ -10,7 +10,7 @@
 - **Release F** to drop it. The physics object resumes regular simulation.
 - **Tap V while holding F** to throw the held object at the default 15 m/s; a server-validated reliable RPC sets the rigidbody velocity.
 - Other players cannot claim the same object at the same time.
-- No teleporting grabbed entities, no player grab, no vehicle grab, V to throw an already held object.
+- No teleporting grabbed entities, no player grab, no vehicle grab.
 
 ## Added components
 
@@ -19,30 +19,32 @@
 - `Scripts/Game/CGS_Portal/CGS_GrabService.c`: server-only dynamic-physics pull.
 - `Configs/System/chimeraInputCommon.conf`: adds a hold-style `CGSPortalGunGrab` action bound to `keyboard:KC_F`.
 
-## Make a temporary test object
+## Existing cube test object
 
-Until the custom CGS Relay Core model is imported:
+The existing `Prefabs/Props/Core/Not_Companion_Cube.et` is already in this addon.
+It uses `Common/Models/NotCompaCube.xob` and has a dynamic 20kg
+RigidBody, CGS_GrabbableComponent, RplComponent, and
+NwkPhysicsMovementComponent. **Do not rename the existing prefab or its
+resource GUID.** Spawn or use the already placed cube in `unnamed.ent`.
 
-1. In Workbench, **duplicate** a small, movable, collision-enabled vanilla crate/prop into this addon. Do NOT modify the base-game prefab.
-2. Make sure its root entity has a **dynamic RigidBody/Physics** body that supports `Physics.IsDynamic() == true`. A static decor mesh with no physics will be rejected by design.
-3. For multiplayer, make sure the prop has the appropriate **RplComponent** and **NwkPhysicsMovementComponent** configured for server-owned simulated motion. This is required for all players to see the same carry.
-4. Add **CGS_GrabbableComponent** to the prop's root entity, keep **Allow Grab = true**, mass limit **100 kg**, and hold distance **2.5m**. Save the prop as a new addon-local prefab.
-5. Spawn that prefab in the test world and equip `Prefabs/Weapons/Core/Portal_Gun_.et`.
+For other props later, attach CGS_GrabbableComponent to the root of any
+compatible **dynamic, collision-enabled replicated physics entity**.
 
 ## Tests
 
 1. **Game-script compile:** verify that all three new classes compile, input config loads, and weapon prefab instantiates with the grab component.
 2. **Offline basic:** look at the test crate from 2–6m. Hold F. Expect `[CGS GRAB] Started`, the crate to physically approach, then to follow the aim. Release F, expect `[CGS GRAB] Released`, then gravity.
-3. **Rejection:** aim at world terrain, characters, a vehicle, static crate, or another object without the component. No grab should occur.
-4. **Collision:** face a wall while carrying. The crate should **not teleport through the wall**. It may collide, stop or release if it gets too far away.
-5. **Ownership:** on a dedicated server, Player A grabs the crate. Player B tries to grab the same crate; B must fail. A releases, then B can grab.
-6. **Weapon swap:** while holding F, put away the Portal Gun or disconnect. The grab should release automatically.
-7. **Regression:** shoot Blue with LMB and Orange with MMB. Pinkifier and portal teleportation must still work.
+3. **Throw:** hold F until the cube is in front of you, press V once while F remains held. Expect `[CGS GRAB THROW INPUT]` and `[CGS GRAB THROW]`, and the cube should move forward without player teleportation. Release F afterwards.
+4. **Rejection:** aim at world terrain, characters, a vehicle, static crate, or another object without the component. No grab should occur.
+5. **Collision:** face a wall while carrying. The crate should **not teleport through the wall**. It may collide, stop or release if it gets too far away.
+6. **Ownership:** on a dedicated server, Player A grabs the crate. Player B tries to grab the same crate; B must fail. A releases, then B can grab.
+7. **Weapon swap:** while holding F, put away the Portal Gun or disconnect. The grab should release automatically.
+8. **Regression:** shoot Blue with LMB and Orange with MMB. Pinkifier and portal teleportation must still work.
 
 ## Current limitations and next phase
 
-- The first version pulls/holds/drops only; **push/throw is now implemented with V while holding F**.
-- No custom Relay Core cube mesh is included in this phase; once physics is verified, import an original crate/cube model and add this **same component** to it.
+- F pulls/holds/drops; **V throws only the prop currently carried by F**. There is not yet a separate ranged push blast for unheld objects.
+- The test object uses the existing `NotCompaCube.xob` mesh; its final art/texture pass is separate from the grab/throw mechanics.
 - High-latency carry may jitter: target aim arrives at roughly 8 updates per second; server drives physics; clients observe physics replication.
 - Grabbing only supports world-space, dynamic physics props. Inventory items, static map geometry, players and vehicles are explicitly unsupported.
 - Enfusion platform API assumptions need validation by running Workbench; report any script errors rather than treating this branch as production-ready.
