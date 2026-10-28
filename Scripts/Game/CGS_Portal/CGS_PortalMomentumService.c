@@ -55,22 +55,6 @@ class CGS_PortalMomentumState : Managed
 	// available as a same-flight fallback and is default when off.
 	bool m_bAdaptiveFloorFlight;
 	int m_iAdaptiveAcceptedPulses;
-
-	// READ-ONLY camera quality probe. No CameraBase/ScriptCamera
-	// setters, no SetCameraEx, no extra teleports or input changes.
-	bool m_bFlightCameraQualityProbe;
-	bool m_bFlightProbeStarted;
-	vector m_vFlightProbePreviousCharacter;
-	vector m_vFlightProbePreviousCamera;
-	int m_iFlightProbePreviousMs;
-	int m_iFlightProbeLastPrintMs;
-	int m_iFlightProbeFrames;
-	int m_iFlightProbeCharacterUpFrames;
-	int m_iFlightProbeCameraUpFrames;
-	int m_iFlightProbeCharacterStallFrames;
-	float m_fFlightProbeMaxCharacterStepY;
-	float m_fFlightProbeMaxCameraStepY;
-	float m_fFlightProbeMaxCameraMismatchY;
 }
 
 //------------------------------------------------------------------------------------------------
@@ -158,7 +142,7 @@ class CGS_PortalMomentumService
 	// OFFLINE ONLY. Unlike the old high-speed all-axis virtual momentum,
 	// this is a small, time-bounded VERTICAL lift after a safe teleport.
 	// It stops at the apex and hands falling/walking back to Reforger.
-	static void StartFloorLoop(IEntity character, vector expectedExit, float upwardSpeed, float timeoutSeconds, bool debugLog, bool adaptiveFlight, bool qualityProbe)
+	static void StartFloorLoop(IEntity character, vector expectedExit, float upwardSpeed, float timeoutSeconds, bool debugLog, bool adaptiveFlight)
 	{
 		if (!Replication.IsServer() || Replication.IsRunning() || !character)
 			return;
@@ -182,8 +166,6 @@ class CGS_PortalMomentumService
 			state.m_fFloorHighestObservedY = expectedExit[1];
 			state.m_iFloorStalledFrames = 0;
 			state.m_bAdaptiveFloorFlight = adaptiveFlight;
-			state.m_bFlightCameraQualityProbe = qualityProbe;
-			state.m_bFlightProbeStarted = false;
 			state.m_iAdaptiveAcceptedPulses = 0;
 			state.m_iFloorArrivalTimeoutMs = state.m_iArmedAtMs + 650;
 			// The flight timeout starts AFTER the character actually
@@ -192,8 +174,8 @@ class CGS_PortalMomentumService
 			state.m_iExpireMs = state.m_iFloorArrivalTimeoutMs + 1;
 			state.m_bDebug = debugLog;
 			if (debugLog)
-				PrintFormat("[CGS FLOOR LOOP] Pending arrival character=%1 old=%2 expectedExit=%3 upward=%4 adaptive=%5 viewProbe=%6",
-					character, character.GetOrigin(), expectedExit, safeSpeed, adaptiveFlight, qualityProbe);
+				PrintFormat("[CGS FLOOR LOOP] Pending arrival character=%1 old=%2 expectedExit=%3 upward=%4 adaptive=%5",
+					character, character.GetOrigin(), expectedExit, safeSpeed, adaptiveFlight);
 			return;
 		}
 	}
@@ -256,97 +238,6 @@ class CGS_PortalMomentumService
 		if (debugLog)
 			PrintFormat("[CGS MOMENTUM MP] Arm #%1 server=%2 trackOnly=%3 velocity=%4 duration=%5s gravity=%6",
 				s_iMomentumArms, Replication.IsServer(), trackOnly, wantedVelocity, durationSeconds, gravity);
-	}
-
-	// READ-ONLY: sample the actual native player camera and the actual
-	// character origin on each flight update. During a stuttering
-	// camera motion test we can compare native camera-vs-character
-	// movement instead of assuming that 108/108 accepted teleports
-	// imply smooth visuals. No engine camera state is ever modified.
-	protected static void SampleFloorFlightCamera(CGS_PortalMomentumState state, IEntity character, BaseWorld world, int now)
-	{
-		if (!state || !state.m_bFlightCameraQualityProbe || !character || !world || Replication.IsRunning())
-			return;
-
-		PlayerController localOwner = GetGame().GetPlayerController();
-		if (!localOwner || localOwner.GetControlledEntity() != character)
-			return;
-
-		CameraManager cameraManager = GetGame().GetCameraManager();
-		if (!cameraManager || !cameraManager.CurrentCamera())
-			return;
-
-		vector nativeCamera[4];
-		world.GetCurrentCamera(nativeCamera);
-		vector characterPosition = character.GetOrigin();
-		vector cameraPosition = nativeCamera[3];
-
-		if (!state.m_bFlightProbeStarted)
-		{
-			state.m_bFlightProbeStarted = true;
-			state.m_vFlightProbePreviousCharacter = characterPosition;
-			state.m_vFlightProbePreviousCamera = cameraPosition;
-			state.m_iFlightProbePreviousMs = now;
-			state.m_iFlightProbeLastPrintMs = now;
-			if (state.m_bDebug)
-				PrintFormat("[CGS FLIGHT VIEW START] character=%1 camera=%2 nativeCameraSlot=%3",
-					characterPosition, cameraPosition, cameraManager.CurrentCamera().GetCameraIndex());
-			return;
-		}
-
-		int intervalMs = now - state.m_iFlightProbePreviousMs;
-		if (intervalMs <= 0 || intervalMs > 150)
-		{
-			// A long editor frame gap is not a valid 60FPS-camera
-			// measurement; never contaminate our largest-step stats.
-			state.m_vFlightProbePreviousCharacter = characterPosition;
-			state.m_vFlightProbePreviousCamera = cameraPosition;
-			state.m_iFlightProbePreviousMs = now;
-			return;
-		}
-
-		float characterDeltaY = characterPosition[1] - state.m_vFlightProbePreviousCharacter[1];
-		float cameraDeltaY = cameraPosition[1] - state.m_vFlightProbePreviousCamera[1];
-		float mismatchY = Math.AbsFloat(characterDeltaY - cameraDeltaY);
-
-		state.m_iFlightProbeFrames++;
-		if (characterDeltaY > 0.01)
-			state.m_iFlightProbeCharacterUpFrames++;
-		if (cameraDeltaY > 0.01)
-			state.m_iFlightProbeCameraUpFrames++;
-		if (Math.AbsFloat(characterDeltaY) < 0.008)
-			state.m_iFlightProbeCharacterStallFrames++;
-
-		state.m_fFlightProbeMaxCharacterStepY = Math.Max(state.m_fFlightProbeMaxCharacterStepY, Math.AbsFloat(characterDeltaY));
-		state.m_fFlightProbeMaxCameraStepY = Math.Max(state.m_fFlightProbeMaxCameraStepY, Math.AbsFloat(cameraDeltaY));
-		state.m_fFlightProbeMaxCameraMismatchY = Math.Max(state.m_fFlightProbeMaxCameraMismatchY, mismatchY);
-
-		if (state.m_bDebug && now - state.m_iFlightProbeLastPrintMs >= 180)
-		{
-			state.m_iFlightProbeLastPrintMs = now;
-			PrintFormat("[CGS FLIGHT VIEW] dtMs=%1 playerDeltaY=%2 cameraDeltaY=%3 mismatchY=%4 playerY=%5 cameraY=%6",
-				intervalMs, characterDeltaY, cameraDeltaY, mismatchY, characterPosition[1], cameraPosition[1]);
-		}
-
-		state.m_vFlightProbePreviousCharacter = characterPosition;
-		state.m_vFlightProbePreviousCamera = cameraPosition;
-		state.m_iFlightProbePreviousMs = now;
-	}
-
-	// Report one summary per completed upward arc. The native camera
-	// should ideally track the character continuously, but even if
-	// it mirrors every hard pulse exactly these measurements still
-	// tell us how much visual stutter is inherited from owner motion.
-	protected static void PrintFloorFlightCameraSummary(CGS_PortalMomentumState state)
-	{
-		if (!state || !state.m_bFlightCameraQualityProbe || !state.m_bDebug)
-			return;
-
-		PrintFormat("[CGS FLIGHT QUALITY] frames=%1 charUpFrames=%2 cameraUpFrames=%3 charStallFrames=%4 maxCharStepY=%5 maxCameraStepY=%6 maxViewMismatchY=%7 adaptive=%8",
-			state.m_iFlightProbeFrames, state.m_iFlightProbeCharacterUpFrames,
-			state.m_iFlightProbeCameraUpFrames, state.m_iFlightProbeCharacterStallFrames,
-			state.m_fFlightProbeMaxCharacterStepY, state.m_fFlightProbeMaxCameraStepY,
-			state.m_fFlightProbeMaxCameraMismatchY, state.m_bAdaptiveFloorFlight);
 	}
 
 	// Server: track virtual velocity, move only a locally controlled host.
@@ -459,14 +350,6 @@ class CGS_PortalMomentumService
 				state.m_iArmedAtMs = now;
 				state.m_iExpireMs = now + state.m_iFloorLiftDurationMs;
 				state.m_fFloorHighestObservedY = state.m_vLoopStart[1];
-				state.m_bFlightProbeStarted = false;
-				state.m_iFlightProbeFrames = 0;
-				state.m_iFlightProbeCharacterUpFrames = 0;
-				state.m_iFlightProbeCameraUpFrames = 0;
-				state.m_iFlightProbeCharacterStallFrames = 0;
-				state.m_fFlightProbeMaxCharacterStepY = 0;
-				state.m_fFlightProbeMaxCameraStepY = 0;
-				state.m_fFlightProbeMaxCameraMismatchY = 0;
 				state.m_iLastFloorTeleportPulseMs = now - 80;
 				state.m_iFloorPulseFailures = 0;
 				state.m_bFloorPulseNeedsCheck = false;
@@ -507,7 +390,6 @@ class CGS_PortalMomentumService
 				// OFFLINE-only short pulses until we can integrate a
 				// genuine character-controller flight mode.
 				vector currentOrigin = character.GetOrigin();
-				SampleFloorFlightCamera(state, character, world, now);
 				state.m_fFloorHighestObservedY = Math.Max(state.m_fFloorHighestObservedY, currentOrigin[1]);
 				int pulseAgeMs = now - state.m_iLastFloorTeleportPulseMs;
 
@@ -577,7 +459,6 @@ class CGS_PortalMomentumService
 							state.m_iTicks, state.m_vLoopStart[1], state.m_fFloorHighestObservedY,
 							state.m_vLoopStart[1] + 0.5 * state.m_fFloorInitialUpwardSpeed *
 							state.m_fFloorInitialUpwardSpeed / state.m_fGravity);
-					PrintFloorFlightCameraSummary(state);
 					s_aActive.RemoveOrdered(i);
 					continue;
 				}
