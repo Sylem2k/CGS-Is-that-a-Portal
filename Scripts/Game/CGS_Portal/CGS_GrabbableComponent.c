@@ -31,6 +31,8 @@ class CGS_GrabbableComponent : ScriptComponent
 	protected int m_iPreviousPropSampleMs;
 	protected bool m_bHasPreviousPropPosition;
 	protected int m_iLastBlockedPortalLogMs = -10000;
+	protected int m_iLastPortalWatchLogMs = -10000;
+	protected bool m_bPortalTickReported;
 
 	// This state is only read and changed by the authoritative server.
 	// Do not replicate it as a writable client variable.
@@ -49,6 +51,12 @@ class CGS_GrabbableComponent : ScriptComponent
 
 		int nowMs = GetGame().GetWorld().GetWorldTime();
 		vector currentPos = owner.GetOrigin();
+		if (!m_bPortalTickReported && m_bAllowPortalTravel)
+		{
+			m_bPortalTickReported = true;
+			PrintFormat("[CGS PORTAL PROP TICK] active owner=%1 at=%2 travelEnabled=%3",
+				owner, currentPos, CanTravelThroughPortals());
+		}
 
 		if (!m_bHasPreviousPropPosition)
 		{
@@ -111,6 +119,17 @@ class CGS_GrabbableComponent : ScriptComponent
 		// Still standing/falling inside the opening we exited from.
 		// Do not re-enter until the physical prop leaves that area.
 		return entry == m_pProtectedExit;
+	}
+
+	// Near-portal diagnostics report the crossing gates once every
+	// 650ms per cube. No per-frame log spam on a busy server.
+	bool ShouldLogPortalWatch(int nowMs)
+	{
+		if (nowMs - m_iLastPortalWatchLogMs < 650)
+			return false;
+
+		m_iLastPortalWatchLogMs = nowMs;
+		return true;
 	}
 
 	// Failed exit clearance can be tested many times while a cube is
