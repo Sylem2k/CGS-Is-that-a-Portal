@@ -380,11 +380,6 @@ class CGS_PortalTransferComponent : ScriptComponent
 		if (maxSpeed > 0 && outputSpeed > maxSpeed)
 			outgoingVelocity = outgoingVelocity * (maxSpeed / outputSpeed);
 
-		if (verticalLoop && (source.IsDebugEnabled() || destination.IsDebugEnabled()))
-			PrintFormat("[CGS PORTAL VERTICAL LOOP] player=%1 incoming=%2m/s downward=%3m/s outgoingUp=%4m/s blueOrange=%5>%6",
-				playerId, incomingVelocity.Length(), -incomingVelocity[1],
-				outgoingVelocity[1], source.GetPortalID(), destination.GetPortalID());
-
 		// SIMPLE TELEPORT: the default Blue and Orange prefabs turn
 		// off both physical and virtual momentum. Do not send any
 		// launch velocity to the owner; safe teleport restores normal
@@ -402,6 +397,16 @@ class CGS_PortalTransferComponent : ScriptComponent
 		}
 		else if (teleportOnly)
 			outgoingVelocity = vector.Zero;
+
+		if (verticalLoop && (source.IsDebugEnabled() || destination.IsDebugEnabled()))
+			PrintFormat("[CGS PORTAL VERTICAL LOOP] player=%1 incoming=%2m/s downward=%3m/s outgoingUp=%4m/s blueOrange=%5>%6",
+				playerId, incomingVelocity.Length(), -incomingVelocity[1],
+				outgoingVelocity[1], source.GetPortalID(), destination.GetPortalID());
+
+		if (safeOfflineFloorLoop && (source.IsDebugEnabled() || destination.IsDebugEnabled()))
+			PrintFormat("[CGS FLOOR LOOP] Armed player=%1 source=%2 exit=%3 launchUp=%4m/s cap=%5m/s",
+				playerId, source.GetPortalID(), destination.GetPortalID(),
+				outgoingVelocity[1], destination.GetFloorLoopMaxSpeed());
 
 		if (source.IsDebugEnabled() || destination.IsDebugEnabled())
 			PrintFormat("[CGS PORTAL SPEED MULTIPLIER] player=%1 entry=%2m/s exit=%3m/s exitColor=%4 multiplier=%5 minimum=%6 cap=%7",
