@@ -2,6 +2,7 @@ MetaFileClass {
  Name "{82397680AD75CA10}Common/Models/Blue_Portal_Frame.xob"
  Configurations {
   FBXResourceClass PC {
+   Rotate 0 180 0
    MaterialAssigns {
     MaterialAssignClass "{6AB25CDF74485E36}" {
      SourceMaterial "CGS_Portal_Metal"
