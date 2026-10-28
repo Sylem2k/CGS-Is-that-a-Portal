@@ -473,16 +473,19 @@ class CGS_PortalMomentumService
 					continue;
 				}
 
-				// Adaptive mode uses a smaller 0.19m step with 40ms
-				// minimum interval, verified before any new request.
+				// Adaptive mode requests shorter intervals (40ms)
+				// and SPEED-DEPENDENT steps. Fixed 0.19m steps
+				// would unintentionally cap a 7m/s launch near
+				// 4.75m/s. This bounds each step to 0.26m while
+				// shrinking steps as the apex approaches.
 				// It remains a teleport-based OPTICAL experiment.
-				// Legacy and automatic fallback stay 75ms / 0.28m.
+				// Legacy and automatic fallback: 75ms / 0.28m.
 				int pulseInterval = 75;
 				float maxRise = 0.28;
 				if (state.m_bAdaptiveFloorFlight)
 				{
 					pulseInterval = 40;
-					maxRise = 0.19;
+					maxRise = Math.Clamp(desiredUp * 0.04 + 0.025, 0.06, 0.26);
 				}
 				if (pulseAgeMs < pulseInterval)
 					continue;
