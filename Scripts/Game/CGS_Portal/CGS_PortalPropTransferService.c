@@ -28,7 +28,11 @@ class CGS_PortalPropTransferService
 		if (velocity.LengthSq() < 0.25 && elapsedMs > 0 && elapsedMs <= 250)
 			velocity = displacement * (1000.0 / elapsedMs);
 
-		if (velocity.LengthSq() < 0.36)
+		// On solid terrain the inward velocity is often exactly zero
+		// by the first frame that the cube is inside the opening.
+		// Allow only a RECENT and independently validated approach
+		// to complete in that case; unarmed idle props still return.
+		if (velocity.LengthSq() < 0.36 && !grabbable.ServerHasRecentPortalApproach(nowMs))
 			return false;
 
 		ref array<CGS_PortalComponent> portals = {};
@@ -124,7 +128,64 @@ class CGS_PortalPropTransferService
 				}
 			}
 
-			if (!faceEntry && !floorSlide)
+			// Predict the cube's path to the near-surface portal plane.
+			// Checking only CURRENT side/up failed in the supplied
+			// Workbench log: at depth 2.6m the cube was outside the
+			// rectangle; by depth -0.08m it was inside but the terrain
+			// had already canceled its inward velocity. Use the future
+			// intersection while the rigidbody is still moving.
+			bool projectedEntry = false;
+			bool rememberedContact = false;
+			float predictedSide = currentSide;
+			float predictedUp = currentUp;
+			if (!faceEntry && !floorSlide && closingSpeed < -0.8 &&
+				currentDepth >= 0.10 && currentDepth <= 2.4)
+			{
+				// Target just above the underlying solid surface; never
+				// simulate full flight or future collisions.
+				float secondsToFace = (currentDepth - 0.25) / -closingSpeed;
+				if (secondsToFace >= 0 && secondsToFace <= 0.24)
+				{
+					vector impact = currentPos + velocity * secondsToFace;
+					impact[1] = impact[1] - 4.905 * secondsToFace * secondsToFace;
+					vector impactDelta = impact - sourceCenter;
+					predictedSide = vector.Dot(impactDelta, sourceRight);
+					predictedUp = vector.Dot(impactDelta, sourceUp);
+
+					// The cube is not a point; allow a small collision
+					// hull margin around the visible portal aperture.
+					if (Math.AbsFloat(predictedSide) <= source.GetPortalHalfWidth() + 0.30 &&
+						Math.AbsFloat(predictedUp) <= source.GetPortalHalfHeight() + 0.35)
+					{
+						grabbable.ServerRememberPortalApproach(source, velocity, nowMs);
+						// Teleport BEFORE hitting the SOLID surface.
+						// This keeps at least half a meter clearance.
+						if (currentDepth <= 1.75)
+							projectedEntry = true;
+					}
+				}
+			}
+
+			// If the solid terrain/wall has already canceled velocity,
+			// finish a RECENT independently validated approach once
+			// the same cube is inside the opening and near the surface.
+			// Idle cubes cannot pass: the approach record expires
+			// after 450 ms and is cleared every time a prop is grabbed.
+			vector recentApproachVelocity;
+			if (!faceEntry && !floorSlide && !projectedEntry &&
+				currentDepth >= -0.60 && currentDepth <= 0.95 &&
+				Math.AbsFloat(currentSide) <= source.GetPortalHalfWidth() + 0.30 &&
+				Math.AbsFloat(currentUp) <= source.GetPortalHalfHeight() + 0.35 &&
+				grabbable.ServerGetRecentPortalApproach(source, nowMs, recentApproachVelocity))
+			{
+				rememberedContact = true;
+				velocity = recentApproachVelocity;
+			}
+
+			if (projectedEntry || rememberedContact)
+				floorSlide = sourceNormal[1] > 0.45;
+
+			if (!faceEntry && !floorSlide && !projectedEntry && !rememberedContact)
 			{
 				if ((source.IsDebugEnabled() || destination.IsDebugEnabled()) &&
 					grabbable.ShouldLogPortalWatch(nowMs))
@@ -137,10 +198,9 @@ class CGS_PortalPropTransferService
 				continue;
 			}
 
-			if ((source.IsDebugEnabled() || destination.IsDebugEnabled()) &&
-				grabbable.ShouldLogPortalWatch(nowMs))
-				PrintFormat("[CGS PORTAL PROP CANDIDATE] source=%1 exit=%2 depth=%3 faceEntry=%4 floorSlide=%5 inward=%6 pos=%7",
-					source.GetPortalID(), destination.GetPortalID(), currentDepth, faceEntry, floorSlide, floorApproach, currentPos);
+			if (source.IsDebugEnabled() || destination.IsDebugEnabled())
+				PrintFormat("[CGS PORTAL PROP CANDIDATE] source=%1 exit=%2 depth=%3 predicted=%4 contact=%5 side=%6 up=%7",
+					source.GetPortalID(), destination.GetPortalID(), currentDepth, projectedEntry, rememberedContact, predictedSide, predictedUp);
 
 			if (TransferProp(grabbable, prop, physics, velocity, source, destination, nowMs, floorSlide))
 				return true;

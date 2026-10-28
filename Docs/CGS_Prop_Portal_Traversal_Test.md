@@ -66,6 +66,43 @@ This branch addresses that without changing player teleport or the F/V controls:
 5. If it still fails, send those exact lines from the **server log**. The numbers now distinguish wrong aim/missing crossing, portal registry failure, exit obstruction and a missing prop frame callback. Do not revise cube model/mesh GUID again.
 6. Only after offline works, test with 2 clients in dedicated MP to verify shared object position.
 
+## Oct 28 follow-up: swept crossing fix from the actual Workbench log
+
+The latest log `Pasted text(20261028-052434).txt` confirms `F` and `V` work and
+`[CGS PORTAL THROW WATCH] ... registeredPortals=2`. The cube truly
+travels toward both source openings.
+
+Examples proving the old crossing gate missed the collision:
+
+- Blue: as the cube approaches, `depth=2.61572 side=2.69613 up=-2.12587 closing=-9.20828`
+  (high-speed inward motion just outside the opening), but next diagnostic is
+  `depth=-0.0755906 side=-0.572935 up=-0.824905 closing=0.00118947`
+  (inside opening, terrain has nearly stopped inward motion).
+- Orange slope: `depth=4.15613 up=-3.86903 closing=-10.8657`, then
+  `depth=-0.0627731 up=-1.75882 closing=0.0561044` near the opening.
+  The orange normal has `Y=0.592161`, BELOW the old floor-only 0.65 threshold.
+
+**Implemented here:**
+
+- Predict intersection with the opening at ~0.25m above its plane, using the
+  *current server physics velocity* and a short gravity adjustment (max 240ms
+  forecast). The cube is only transferred when it reaches within 1.75m of
+  the face, avoiding premature 4m-away teleports.
+- Permit the cube's physical collision hull near the opening edges
+  (0.3m horizontal / 0.35m vertical margins) rather than requiring its center
+  to be inside the overly shrunken prop rectangle at the wrong sample.
+- Remember the verified source portal and valid inward velocity for 450ms.
+  When the terrain cancels speed at the opening, this can complete the crossing.
+  Regrabbing or a successful teleport clears the history.
+- Applies to slopes as well as flat ground and walls. The player's
+  momentum-free teleport system remains untouched.
+
+**Retest:** place your Blue/Orange as before, throw with `F` + `V` toward
+each portal's center, and look for `[CGS PORTAL PROP CANDIDATE]`,
+`[CGS PORTAL PROP]` or `[CGS PORTAL PROP BLOCKED]`. If there is a candidate
+but no successful transfer, send those lines, including the blocker.
+Stand well clear of the destination opening.
+
 ## Debug messages
 
 - `[CGS GRAB THROW]` — server launched the held cube with native rigidbody physics.
