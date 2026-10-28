@@ -126,7 +126,7 @@ class CGS_GrabGunComponent : ScriptComponent
 		if (!prop || prop.IsDeleted() || !prop.GetPhysics() || !prop.GetPhysics().IsDynamic())
 		{
 			if (m_bDebug)
-				PrintFormat("[CGS GRAB REJECT] Prop has no DYNAMIC physics. prop=%1 physics=%2", prop, prop && prop.GetPhysics());
+				PrintFormat("[CGS GRAB REJECT] Prop has no DYNAMIC physics. prop=%1", prop);
 			return false;
 		}
 
