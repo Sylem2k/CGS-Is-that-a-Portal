@@ -47,9 +47,15 @@ class CGS_PortalTransferComponent : ScriptComponent
 		bool isFloorLoopExit;
 		if (s_mFloorLoopExits.Find(character, isFloorLoopExit) && isFloorLoopExit && !Replication.IsRunning())
 		{
-			// Players must be free to WALK away from the floor exit.
-			// Failing to clear protection outside its catch area would
-			// permanently block that color even after a canceled lift.
+			// Do NOT rearm while the offline launch is still running.
+			// The host character controller briefly drops between upward
+			// teleport pulses. Those small downward samples are not an
+			// actual return fall and could trigger an instant ping-pong.
+			if (CGS_PortalMomentumService.IsFloorLoopActive(character))
+				return true;
+
+			// A player who genuinely leaves the exit volume by moving
+			// sideways or rising beyond the rescue prism may return later.
 			if (!portal.IsWithinExitCaptureArea(character.GetOrigin()))
 			{
 				s_mProtectedExitPortals.Remove(character);
@@ -60,36 +66,52 @@ class CGS_PortalTransferComponent : ScriptComponent
 				return false;
 			}
 
-			// Do not let the ascent re-enter immediately. Once the
-			// player has had time to reach the apex, permit entry
-			// only near the surface again while descending.
 			vector loopRight;
 			vector loopUp;
 			vector loopNormal;
 			portal.GetPortalBasis(loopRight, loopUp, loopNormal);
 			float exitDepth = vector.Dot(character.GetOrigin() - portal.GetOwner().GetOrigin(), loopNormal);
+			int elapsed = now - protectedSince;
 
-			if (now - protectedSince >= 850 && exitDepth <= 1.25)
+			// Old code only checked controller.GetVelocity()[1], which
+			// was ZERO in the user log during a real -5.51m/s fall.
+			// It therefore stayed protected until the 1.5s fallback,
+			// usually after the player hit the solid ROAD backing.
+			//
+			// Use the existing portal's measured world-space fall speed,
+			// and open the gate INSIDE its rescue zone but well above
+			// the solid terrain. Source and destination both remain UP.
+			float fallSpeed;
+			bool isReallyDescending = portal.IsCharacterDescending(character, fallSpeed);
+			float rearmDepth = Math.Clamp(portal.GetFloorFallCatchHeight() - 0.20, 0.95, 2.70);
+			bool nearFallingEntry = exitDepth >= 0.35 && exitDepth <= rearmDepth;
+
+			if (elapsed >= 620 && nearFallingEntry && isReallyDescending)
 			{
-				ChimeraCharacter loopCharacter = ChimeraCharacter.Cast(character);
-				CharacterControllerComponent loopController;
-				if (loopCharacter)
-					loopController = loopCharacter.GetCharacterController();
-
-				// Controller vertical speed may be briefly zero after a
-				// safe teleport. Accept a delayed fall even if that
-				// speed sample is stale, but never during initial ascent.
-				if ((loopController && loopController.GetVelocity()[1] < -0.35) || now - protectedSince >= 1500)
-				{
-					s_mProtectedExitPortals.Remove(character);
-					s_mExitProtectionStarted.Remove(character);
-					s_mFloorLoopExits.Remove(character);
-					if (portal.IsDebugEnabled())
-						PrintFormat("[CGS FLOOR LOOP] Exit rearmed for descent player=%1 depth=%2 elapsed=%3",
-							character, exitDepth, now - protectedSince);
-					return false;
-				}
+				s_mProtectedExitPortals.Remove(character);
+				s_mExitProtectionStarted.Remove(character);
+				s_mFloorLoopExits.Remove(character);
+				if (portal.IsDebugEnabled())
+					PrintFormat("[CGS FLOOR LOOP] Descent rearmed EARLY player=%1 depth=%2 downSpeed=%3 elapsed=%4",
+						character, exitDepth, fallSpeed, elapsed);
+				return false;
 			}
+
+			// If observed velocity is unavailable (for example after a
+			// long frame gap) still avoid permanently locking the portal.
+			// Never use this late fallback as evidence that a genuine
+			// gravity-loop transfer was caught.
+			if (elapsed >= 1600 && exitDepth <= 1.25)
+			{
+				s_mProtectedExitPortals.Remove(character);
+				s_mExitProtectionStarted.Remove(character);
+				s_mFloorLoopExits.Remove(character);
+				if (portal.IsDebugEnabled())
+					PrintFormat("[CGS FLOOR LOOP] Exit rearmed by timeout player=%1 depth=%2 elapsed=%3 (fall missed)",
+						character, exitDepth, elapsed);
+				return false;
+			}
+
 			return true;
 		}
 
