@@ -145,7 +145,7 @@ class CGS_PortalPropTransferService
 		float fraction = GetGame().GetWorld().TraceMove(trace, null);
 		if (fraction < 0.999)
 		{
-			if (source.IsDebugEnabled() || destination.IsDebugEnabled())
+			if ((source.IsDebugEnabled() || destination.IsDebugEnabled()) && grabbable.ShouldLogPortalBlocked(nowMs))
 				PrintFormat("[CGS PORTAL PROP BLOCKED] source=%1 exit=%2 blocker=%3", source.GetPortalID(), destination.GetPortalID(), trace.TraceEnt);
 			return false;
 		}
