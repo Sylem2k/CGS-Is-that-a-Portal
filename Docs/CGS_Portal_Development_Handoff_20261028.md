@@ -79,6 +79,16 @@ destroying it may legitimately stop a PIP pass. If screens still
 flicker while camera slots stay fixed, investigate HDR matching,
 layout/material reset, and 12 FPS capture separately.
 
+## New work in progress — adaptive flight test and floor-aperture idea
+
+- **PR #67 is merged.** Its stable Blue/Orange PIP camera slots are in `main`; I still need an independent Workbench log proving the visible screen flicker is gone.
+- My next goal is smooth PLAYER flight like the dynamic cube, without breaking the confirmed 11-loop near-surface travel from PR #66.
+- This branch: `feature/offline-adaptive-flight-test-20261028`, new draft PR #68. It adds `m_bAdaptiveFloorFlight` to the two gun portal prefabs, opt-in **only** for offline floor→floor mode. If this flag is unchecked, original 75ms / 0.28m upward pulses continue unchanged.
+- The experimental mode attempts speed-scaled smaller steps no more often than every 40ms, waits for real confirmed player motion before issuing another, and automatically drops back to the verified 75ms driver if its movement requests fail. **Not true native velocity; Workbench compilation/play test still pending**. I must compare actual peakY, responsiveness, camera shake, and `FALL_ZONE` returns against the old mode before merging.
+- Details/test procedure in `Docs/CGS_Adaptive_Player_Flight_Experiment_20261028.md`. This includes rollback and exact `[CGS FLOOR TP PULSE]`, `[CGS FLOOR TP VERIFY]`, `[CGS FLOOR ADAPTIVE]` diagnostics.
+- I also asked whether a portal could become like a water surface or a brief no-clip zone, letting characters cross the floor without hitting the static road collider. **Answer in principle: yes by a predicted, direction-specific pre-collision portal crossing/teleport trigger** (already resembles the cube's swept-entry technique); **not** by simply erasing a hole in terrain at runtime. Temporarily ignoring collisions only inside the oval might be possible if Enfusion offers safe per-character/per-surface collision filtering, **not yet verified**. I must not globally disable world-road collision or let the player noclip through unrelated ground. Build that crossing mode as a separate PR after the movement experiment.
+- No work here touches `Not_Companion_Cube.et`, prop-transfer, gun input, the working floor re-arm gate, or dedicated multiplayer.
+
 ## What is proven working — do NOT regress
 
 1. I can shoot **Blue** and **Orange** portals onto roads/floors and suitable other surfaces; each has an owner and a paired portal. PIP viewing works, though the feed can start/stop repeatedly.

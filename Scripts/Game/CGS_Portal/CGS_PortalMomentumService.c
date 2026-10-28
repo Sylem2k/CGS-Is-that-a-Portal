@@ -50,6 +50,11 @@ class CGS_PortalMomentumState : Managed
 	float m_fFloorPulseTargetY;
 	bool m_bFloorPulseNeedsCheck;
 	int m_iFloorPulseFailures;
+
+	// OFFLINE test: adaptive cadence; legacy 75ms movement stays
+	// available as a same-flight fallback and is default when off.
+	bool m_bAdaptiveFloorFlight;
+	int m_iAdaptiveAcceptedPulses;
 }
 
 //------------------------------------------------------------------------------------------------
@@ -137,7 +142,7 @@ class CGS_PortalMomentumService
 	// OFFLINE ONLY. Unlike the old high-speed all-axis virtual momentum,
 	// this is a small, time-bounded VERTICAL lift after a safe teleport.
 	// It stops at the apex and hands falling/walking back to Reforger.
-	static void StartFloorLoop(IEntity character, vector expectedExit, float upwardSpeed, float timeoutSeconds, bool debugLog)
+	static void StartFloorLoop(IEntity character, vector expectedExit, float upwardSpeed, float timeoutSeconds, bool debugLog, bool adaptiveFlight)
 	{
 		if (!Replication.IsServer() || Replication.IsRunning() || !character)
 			return;
@@ -160,6 +165,8 @@ class CGS_PortalMomentumService
 			state.m_fFloorInitialUpwardSpeed = safeSpeed;
 			state.m_fFloorHighestObservedY = expectedExit[1];
 			state.m_iFloorStalledFrames = 0;
+			state.m_bAdaptiveFloorFlight = adaptiveFlight;
+			state.m_iAdaptiveAcceptedPulses = 0;
 			state.m_iFloorArrivalTimeoutMs = state.m_iArmedAtMs + 650;
 			// The flight timeout starts AFTER the character actually
 			// arrives. Until then only wait for the safe teleport to
@@ -167,8 +174,8 @@ class CGS_PortalMomentumService
 			state.m_iExpireMs = state.m_iFloorArrivalTimeoutMs + 1;
 			state.m_bDebug = debugLog;
 			if (debugLog)
-				PrintFormat("[CGS FLOOR LOOP] Pending arrival character=%1 old=%2 expectedExit=%3 upward=%4",
-					character, character.GetOrigin(), expectedExit, safeSpeed);
+				PrintFormat("[CGS FLOOR LOOP] Pending arrival character=%1 old=%2 expectedExit=%3 upward=%4 adaptive=%5",
+					character, character.GetOrigin(), expectedExit, safeSpeed, adaptiveFlight);
 			return;
 		}
 	}
@@ -390,28 +397,54 @@ class CGS_PortalMomentumService
 				// character's position on a later update, never
 				// immediately after the function call. Check it only
 				// after 70ms, not on the same frame.
-				if (state.m_bFloorPulseNeedsCheck && pulseAgeMs >= 70)
+				if (state.m_bFloorPulseNeedsCheck)
 				{
 					float actualY = currentOrigin[1];
 					bool movedUp = actualY > state.m_fFloorPulseBeforeY + 0.025;
-					if (movedUp)
-						state.m_iFloorPulseFailures = 0;
-					else
-						state.m_iFloorPulseFailures++;
-
-					if (state.m_bDebug)
-						PrintFormat("[CGS FLOOR TP VERIFY] requestY=%1 startY=%2 actualY=%3 moved=%4 failures=%5",
-							state.m_fFloorPulseTargetY, state.m_fFloorPulseBeforeY, actualY,
-							movedUp, state.m_iFloorPulseFailures);
-					state.m_bFloorPulseNeedsCheck = false;
-
-					if (state.m_iFloorPulseFailures >= 3)
+					bool readyToVerify = pulseAgeMs >= 70;
+					if (state.m_bAdaptiveFloorFlight)
 					{
-						if (state.m_bDebug)
-							Print("[CGS FLOOR LOOP] Cancel: engine rejected repeated local teleport pulses.");
-						s_aActive.RemoveOrdered(i);
-						continue;
+						// Confirm motion as soon as it arrives; do
+						// not queue another async teleport until then.
+						readyToVerify = (pulseAgeMs >= 18 && movedUp) || pulseAgeMs >= 120;
 					}
+
+					if (readyToVerify)
+					{
+						if (movedUp)
+						{
+							state.m_iFloorPulseFailures = 0;
+							if (state.m_bAdaptiveFloorFlight)
+								state.m_iAdaptiveAcceptedPulses++;
+						}
+						else
+							state.m_iFloorPulseFailures++;
+
+						if (state.m_bDebug)
+							PrintFormat("[CGS FLOOR TP VERIFY] requestY=%1 startY=%2 actualY=%3 moved=%4 failures=%5 adaptive=%6 latencyMs=%7",
+								state.m_fFloorPulseTargetY, state.m_fFloorPulseBeforeY, actualY,
+								movedUp, state.m_iFloorPulseFailures, state.m_bAdaptiveFloorFlight, pulseAgeMs);
+						state.m_bFloorPulseNeedsCheck = false;
+
+						if (state.m_bAdaptiveFloorFlight && state.m_iFloorPulseFailures >= 2)
+						{
+							state.m_bAdaptiveFloorFlight = false;
+							state.m_iFloorPulseFailures = 0;
+							if (state.m_bDebug)
+								Print("[CGS FLOOR ADAPTIVE] Fallback to verified 75ms pulses after two ineffective steps.");
+						}
+						else if (state.m_iFloorPulseFailures >= 3)
+						{
+							if (state.m_bDebug)
+								Print("[CGS FLOOR LOOP] Cancel: engine rejected repeated local teleport pulses.");
+							s_aActive.RemoveOrdered(i);
+							continue;
+						}
+					}
+
+					// Never overlap owner-local teleport requests.
+					if (state.m_bFloorPulseNeedsCheck)
+						continue;
 				}
 
 				float flightSeconds = Math.Max(0.0, (now - state.m_iArmedAtMs) * 0.001);
@@ -440,9 +473,21 @@ class CGS_PortalMomentumService
 					continue;
 				}
 
-				// One owner-local update every 75ms, never a teleport
-				// per rendered frame. No horizontal steering override.
-				if (pulseAgeMs < 75)
+				// Adaptive mode requests shorter intervals (40ms)
+				// and SPEED-DEPENDENT steps. Fixed 0.19m steps
+				// would unintentionally cap a 7m/s launch near
+				// 4.75m/s. This bounds each step to 0.26m while
+				// shrinking steps as the apex approaches.
+				// It remains a teleport-based OPTICAL experiment.
+				// Legacy and automatic fallback: 75ms / 0.28m.
+				int pulseInterval = 75;
+				float maxRise = 0.28;
+				if (state.m_bAdaptiveFloorFlight)
+				{
+					pulseInterval = 40;
+					maxRise = Math.Clamp(desiredUp * 0.04 + 0.025, 0.06, 0.26);
+				}
+				if (pulseAgeMs < pulseInterval)
 					continue;
 
 				// This does not try to move the character downwards;
@@ -453,7 +498,7 @@ class CGS_PortalMomentumService
 
 				// Limit step size so teleports cannot pass a ceiling
 				// or cause the old high-speed/uncapped "yeet".
-				float rise = Math.Min(missingRise, 0.28);
+				float rise = Math.Min(missingRise, maxRise);
 				vector target = currentOrigin + Vector(0, rise, 0);
 
 				TraceSphere upwardSweep = new TraceSphere();
@@ -490,14 +535,25 @@ class CGS_PortalMomentumService
 				state.m_iTicks++;
 
 				if (state.m_bDebug)
-					PrintFormat("[CGS FLOOR TP PULSE] n=%1 accepted=%2 actualBefore=%3 requested=%4 plannedY=%5",
-						state.m_iTicks, accepted, currentOrigin, target, plannedY);
+					PrintFormat("[CGS FLOOR TP PULSE] n=%1 accepted=%2 actualBefore=%3 requested=%4 plannedY=%5 adaptive=%6 interval=%7",
+						state.m_iTicks, accepted, currentOrigin, target, plannedY, state.m_bAdaptiveFloorFlight, pulseInterval);
 
 				if (!accepted)
 				{
-					if (state.m_bDebug)
-						Print("[CGS FLOOR LOOP] Cancel: engine rejected TeleportLocalPlayer request.");
-					s_aActive.RemoveOrdered(i);
+					if (state.m_bAdaptiveFloorFlight)
+					{
+						state.m_bAdaptiveFloorFlight = false;
+						state.m_bFloorPulseNeedsCheck = false;
+						state.m_iFloorPulseFailures = 0;
+						if (state.m_bDebug)
+							Print("[CGS FLOOR ADAPTIVE] Teleport refused; switching to verified 75ms path.");
+					}
+					else
+					{
+						if (state.m_bDebug)
+							Print("[CGS FLOOR LOOP] Cancel: engine rejected TeleportLocalPlayer request.");
+						s_aActive.RemoveOrdered(i);
+					}
 				}
 				continue;
 			}

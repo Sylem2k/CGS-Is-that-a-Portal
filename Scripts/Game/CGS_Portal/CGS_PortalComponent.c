@@ -102,6 +102,12 @@ class CGS_PortalComponent : ScriptComponent
 	[Attribute("1.5", UIWidgets.EditBox, "Floor loop safety timeout in seconds (maximum 2)")]
 	protected float m_fFloorLoopTimeout;
 
+	// Offline prototype ONLY. The legacy 75ms pulse path is preserved
+	// and automatically resumes if the faster host-local pilot fails.
+	// This is a visual cadence experiment, NOT native physics velocity.
+	[Attribute("0", UIWidgets.CheckBox, "OFFLINE EXPERIMENT: adaptive smaller floor-flight pulses; auto fallback to known-good mode")]
+	protected bool m_bAdaptiveFloorFlight;
+
 	[Attribute("1", UIWidgets.CheckBox, "Safe player teleport: use Reforger SCR_Global.TeleportPlayer (resets velocity)")]
 	protected bool m_bUseSafePlayerTeleport;
 
@@ -201,6 +207,11 @@ class CGS_PortalComponent : ScriptComponent
 	float GetFloorLoopTimeout()
 	{
 		return Math.Clamp(m_fFloorLoopTimeout, 0.4, 2.0);
+	}
+
+	bool IsAdaptiveFloorFlightEnabled()
+	{
+		return m_bAdaptiveFloorFlight;
 	}
 
 	float GetFloorFallCatchHeight()

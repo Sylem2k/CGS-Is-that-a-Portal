@@ -551,7 +551,8 @@ class CGS_PortalTransferComponent : ScriptComponent
 			// helper waits for arrival instead of anchoring to source.
 			CGS_PortalMomentumService.StartFloorLoop(
 				character, destinationPosition, outgoingVelocity[1], destination.GetFloorLoopTimeout(),
-				source.IsDebugEnabled() || destination.IsDebugEnabled());
+				source.IsDebugEnabled() || destination.IsDebugEnabled(),
+				destination.IsAdaptiveFloorFlightEnabled());
 		}
 		else if (destination.ShouldSimulateMomentum())
 		{
