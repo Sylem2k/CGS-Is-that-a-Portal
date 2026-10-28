@@ -27,6 +27,10 @@ GenericEntity {
    m_fFallCatchHalfWidth 2
    m_fFallCatchHalfLength 2.4
    m_fExitLateralScale 0
+   m_bFloorGravityLoop 1
+   m_fFloorLoopMinSpeed 4.5
+   m_fFloorLoopMaxSpeed 7
+   m_fFloorLoopTimeout 1.5
    m_bUseSafePlayerTeleport 1
    m_bPreserveMomentum 0
    m_fMomentumMultiplier 1
