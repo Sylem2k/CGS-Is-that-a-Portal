@@ -1,0 +1,28 @@
+GenericEntity {
+ ID "6AB840A2F1C63169"
+ components {
+  MeshObject "{6AB840A2F1C6314C}" {
+   Object "{CA6F3A1C49398AA7}Common/Models/NotCompaCube.xob"
+  }
+  RigidBody "{6AB840A2F1C631FE}" {
+   Static 0
+   Mass 20
+   ModelGeometry 1
+  }
+  CGS_GrabbableComponent "{6AB840A2AE4E71B3}" {
+   m_bCanBeGrabbed 1
+   m_fMaxMass 100
+   m_fHoldDistance 2.5
+  }
+  NwkPhysicsMovementComponent "{6AB840A2F1C63212}" {
+  }
+  RplComponent "{6AB840A1EA0B1F3B}" {
+   "Rpl State Override" Runtime
+   "Parent Node From Parent Entity" 0
+  }
+  Hierarchy "{6AB840A1F65F5F2B}" {
+  }
+ }
+ Flags 0x403 0
+ coords 81.277 4.971 67.034
+}
