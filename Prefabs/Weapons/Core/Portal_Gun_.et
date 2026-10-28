@@ -8,6 +8,21 @@ GenericEntity {
   WeaponSoundComponent "{6AB21D161F2E70B2}" {
    DistanceManagement 0
   }
+  CGS_GrabGunComponent "{6AB21D161F2E75A2}" {
+   m_fGrabRange 8
+   m_fBreakDistance 12
+   m_fPullResponse 8
+   m_fMaxHoldSpeed 15
+   m_bDebug 1
+  }
+  CGS_PortalGunComponent "{6AB21D161F2E7461}" {
+   m_sBluePortalPrefab "{E5DA100433B35A4E}Prefabs/Weapons/Core/Blue_Portal.et"
+   m_sOrangePortalPrefab "{EA7C0FE5E8E2E3C0}Prefabs/Weapons/Core/Orange_Portal.et"
+   m_fShotDistance 90
+   m_fSurfaceOffset 0.04
+   m_iShotCooldownMs 200
+   m_bDebug 1
+  }
   MeshObject "{6AB21D161F2E70B1}" {
    Object "{A4EB7B72BC9B1048}Common/Models/Portal_Gun.xob"
    InheritVisibility 1
@@ -60,13 +75,9 @@ GenericEntity {
       Offset 0 0 0
      }
     }
-    // This gun has no weapon-specific animation graph or inspection state.
-    // The player's M9 pistol animation/IK comes from ItemAnimationAttributes.
     WeaponAnimationComponent "{6AB21D161F2E7092}" {
      Enabled 0
     }
-    // Non-ballistic placeholder. Vanilla ADS accesses GetCurrentMuzzle()
-    // without null checks even on script-only weapons. Never chamber ammo.
     MuzzleComponent "{6AB21D161F2E7462}" {
      FireModes {
       BaseFireMode "{6AB21D161F2E7463}" {
@@ -127,21 +138,6 @@ GenericEntity {
     }
    }
   }
-  CGS_PortalGunComponent "{6AB21D161F2E7461}" {
-   m_sBluePortalPrefab "{E5DA100433B35A4E}Prefabs/Weapons/Core/Blue_Portal.et"
-   m_sOrangePortalPrefab "{EA7C0FE5E8E2E3C0}Prefabs/Weapons/Core/Orange_Portal.et"
-   m_fShotDistance 90
-   m_fSurfaceOffset 0.04
-   m_iShotCooldownMs 200
-   m_bDebug 1
-  }
-  CGS_GrabGunComponent "{6AB21D161F2E75A2}" {
-   m_fGrabRange 8
-   m_fBreakDistance 12
-   m_fPullResponse 8
-   m_fMaxHoldSpeed 15
-   m_bDebug 1
-  }
   NwkPhysicsMovementComponent "{6AB21D161F2E7321}" {
   }
   RplComponent "{6AB21D161F2E7324}" {
@@ -152,4 +148,5 @@ GenericEntity {
   }
  }
  Flags 0x400003 0
+ coords 82.665 5.475 66.856
 }
