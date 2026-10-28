@@ -23,6 +23,11 @@ class CGS_PortalMomentumState : Managed
 	bool m_bDebug;
 	bool m_bTrackOnly;
 	int m_iTicks;
+
+	// Offline floor-to-floor prototype. It never uses the legacy
+	// all-axis correction or banks momentum from another transfer.
+	bool m_bSafeFloorLoop;
+	vector m_vLoopStart;
 }
 
 //------------------------------------------------------------------------------------------------
@@ -86,6 +91,33 @@ class CGS_PortalMomentumService
 			CGS_PortalMomentumState state = s_aActive[i];
 			if (state && state.m_Character == character)
 				s_aActive.RemoveOrdered(i);
+		}
+	}
+
+	// OFFLINE ONLY. Unlike the old high-speed all-axis virtual momentum,
+	// this is a small, time-bounded VERTICAL lift after a safe teleport.
+	// It stops at the apex and hands falling/walking back to Reforger.
+	static void StartFloorLoop(IEntity character, float upwardSpeed, float timeoutSeconds, bool debugLog)
+	{
+		if (!Replication.IsServer() || Replication.IsRunning() || !character)
+			return;
+
+		float safeSpeed = Math.Clamp(upwardSpeed, 2.0, 9.0);
+		float safeTime = Math.Clamp(timeoutSeconds, 0.4, 2.0);
+		StartInternal(character, Vector(0, safeSpeed, 0), safeTime, 9.81, 0.16, false, false);
+
+		foreach (CGS_PortalMomentumState state : s_aActive)
+		{
+			if (!state || state.m_Character != character)
+				continue;
+
+			state.m_bSafeFloorLoop = true;
+			state.m_vLoopStart = character.GetOrigin();
+			state.m_bDebug = debugLog;
+			if (debugLog)
+				PrintFormat("[CGS FLOOR LOOP] Start character=%1 upward=%2 durationLimit=%3",
+					character, safeSpeed, safeTime);
+			return;
 		}
 	}
 
@@ -237,6 +269,73 @@ class CGS_PortalMomentumService
 			vector desired = state.m_vVirtualVelocity;
 			desired[1] = desired[1] - state.m_fGravity * dt;
 			state.m_vVirtualVelocity = desired;
+
+			if (state.m_bSafeFloorLoop)
+			{
+				// Release control once upward energy is exhausted.
+				// Native character gravity then handles the descent.
+				if (desired[1] <= 0)
+				{
+					if (state.m_bDebug)
+						PrintFormat("[CGS FLOOR LOOP] Apex: stop lift and return to native gravity. ticks=%1", state.m_iTicks);
+					s_aActive.RemoveOrdered(i);
+					continue;
+				}
+
+				vector floorOrigin = character.GetOrigin();
+				vector fromStart = floorOrigin - state.m_vLoopStart;
+				fromStart[1] = 0;
+
+				// Walking sideways is a deliberate way to EXIT the loop.
+				if (fromStart.LengthSq() > 9.0)
+				{
+					if (state.m_bDebug)
+						Print("[CGS FLOOR LOOP] Cancel: player moved away from exit.");
+					s_aActive.RemoveOrdered(i);
+					continue;
+				}
+
+				float nativeUp = controller.GetVelocity()[1];
+				float liftStep = (desired[1] - nativeUp) * dt;
+				if (liftStep <= 0.003)
+					continue;
+
+				// Hard limit: never move the player sideways or force
+				// high-speed multi-meter jumps as old momentum did.
+				liftStep = Math.Min(liftStep, 0.16);
+				vector nextOrigin = floorOrigin + Vector(0, liftStep, 0);
+
+				TraceSphere safeSweep = new TraceSphere();
+				safeSweep.Start = floorOrigin + Vector(0, 0.95, 0);
+				safeSweep.End = nextOrigin + Vector(0, 0.95, 0);
+				safeSweep.Radius = 0.30;
+				safeSweep.Exclude = character;
+				safeSweep.Flags = TraceFlags.WORLD | TraceFlags.ENTS;
+
+				if (world.TraceMove(safeSweep, null) < 0.999)
+				{
+					if (state.m_bDebug)
+						Print("[CGS FLOOR LOOP] Cancel: upward path blocked.");
+					s_aActive.RemoveOrdered(i);
+					continue;
+				}
+
+				BaseGameEntity playerEntity = BaseGameEntity.Cast(character);
+				if (!playerEntity)
+				{
+					if (state.m_bDebug)
+						Print("[CGS FLOOR LOOP] Cancel: player not a BaseGameEntity.");
+					s_aActive.RemoveOrdered(i);
+					continue;
+				}
+
+				vector floorMatrix[4];
+				character.GetWorldTransform(floorMatrix);
+				floorMatrix[3] = nextOrigin;
+				playerEntity.Teleport(floorMatrix);
+				state.m_iTicks++;
+				continue;
+			}
 
 			// Server keeps an approximate carried velocity for multi-portal
 			// chains; the owning client supplies actual movement in MP.
