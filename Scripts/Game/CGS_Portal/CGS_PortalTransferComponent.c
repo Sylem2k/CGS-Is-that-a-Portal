@@ -328,6 +328,14 @@ class CGS_PortalTransferComponent : ScriptComponent
 				playerId, incomingVelocity.Length(), -incomingVelocity[1],
 				outgoingVelocity[1], source.GetPortalID(), destination.GetPortalID());
 
+		// SIMPLE TELEPORT: the default Blue and Orange prefabs turn
+		// off both physical and virtual momentum. Do not send any
+		// launch velocity to the owner; safe teleport restores normal
+		// walking/gravity without velocity corrections after arrival.
+		bool teleportOnly = !destination.ShouldPreserveMomentum() && !destination.ShouldSimulateMomentum();
+		if (teleportOnly)
+			outgoingVelocity = vector.Zero;
+
 		if (source.IsDebugEnabled() || destination.IsDebugEnabled())
 			PrintFormat("[CGS PORTAL SPEED MULTIPLIER] player=%1 entry=%2m/s exit=%3m/s exitColor=%4 multiplier=%5 minimum=%6 cap=%7",
 				playerId, incomingVelocity.Length(), outgoingVelocity.Length(),
@@ -450,6 +458,10 @@ class CGS_PortalTransferComponent : ScriptComponent
 		{
 			CGS_PortalMomentumService.Stop(character);
 		}
+
+		if (teleportOnly && (source.IsDebugEnabled() || destination.IsDebugEnabled()))
+			PrintFormat("[CGS PORTAL TELEPORT ONLY] player=%1 source=%2 exit=%3 launchVelocity=%4",
+				playerId, source.GetPortalID(), destination.GetPortalID(), outgoingVelocity);
 
 		s_LastTransferTimes.Set(character, now);
 

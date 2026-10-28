@@ -28,14 +28,14 @@ GenericEntity {
    m_fFallCatchHalfLength 2.4
    m_fExitLateralScale 0
    m_bUseSafePlayerTeleport 1
-   m_bPreserveMomentum 1
-   m_fMomentumMultiplier 1.5
-   m_bStackMomentum 1
+   m_bPreserveMomentum 0
+   m_fMomentumMultiplier 1
+   m_bStackMomentum 0
    m_fMomentumStackWindow 4
    m_fMinimumExitSpeed 0
    m_fMaxExitSpeed 80
-   m_bSimulateMomentum 1
-   m_fMomentumCarrySeconds 7
+   m_bSimulateMomentum 0
+   m_fMomentumCarrySeconds 0
    m_fMomentumGravity 9.81
    m_fMomentumMaxStep 2
   }
