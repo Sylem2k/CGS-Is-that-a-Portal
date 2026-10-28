@@ -2,7 +2,7 @@
 // This component belongs on the GUN. It only operates on objects that
 // contain CGS_GrabbableComponent on their root and have dynamic physics.
 // All target selection, ownership and physical movement are server-owned.
-[ComponentEditorProps(category: "CGS Portal", description: "Server-authoritative G-key grab and physical hold for opt-in props.")]
+[ComponentEditorProps(category: "CGS Portal", description: "Server-authoritative J-key grab and physical hold for opt-in props.")]
 class CGS_GrabGunComponentClass : ScriptComponentClass
 {
 }
@@ -72,11 +72,19 @@ class CGS_GrabGunComponent : ScriptComponent
 	bool ServerStartGrab(SCR_PlayerController requester, vector cameraOrigin, vector cameraDirection)
 	{
 		if (!ValidatePlayerAndAim(requester, cameraOrigin, cameraDirection))
+		{
+			if (m_bDebug)
+				Print("[CGS GRAB REJECT] Gun not equipped, invalid camera, or character unavailable.");
 			return false;
+		}
 
 		int playerId = requester.GetPlayerId();
 		if (m_pHeld)
+		{
+			if (m_bDebug)
+				PrintFormat("[CGS GRAB REJECT] Gun already holds a prop for player=%1", m_iHolderPlayerId);
 			return false;
+		}
 
 		vector forward = cameraDirection.Normalized();
 		TraceParam trace = new TraceParam();
@@ -89,8 +97,13 @@ class CGS_GrabGunComponent : ScriptComponent
 		excluded.Insert(GetOwner());
 		trace.ExcludeArray = excluded;
 
-		if (GetGame().GetWorld().TraceMove(trace, null) >= 1)
+		float hitFraction = GetGame().GetWorld().TraceMove(trace, null);
+		if (hitFraction >= 1)
+		{
+			if (m_bDebug)
+				PrintFormat("[CGS GRAB REJECT] Raycast hit nothing within %1m. player=%2", m_fGrabRange, playerId);
 			return false;
+		}
 
 		IEntity hit = trace.TraceEnt;
 		CGS_GrabbableComponent grabbable;
@@ -103,15 +116,27 @@ class CGS_GrabGunComponent : ScriptComponent
 		}
 
 		if (!grabbable || !hit || ChimeraCharacter.Cast(hit) || Vehicle.Cast(hit))
+		{
+			if (m_bDebug)
+				PrintFormat("[CGS GRAB REJECT] Ray hit non-grabbable entity=%1; add CGS_GrabbableComponent to root.", trace.TraceEnt);
 			return false;
+		}
 
 		IEntity prop = grabbable.GetOwner();
 		if (!prop || prop.IsDeleted() || !prop.GetPhysics() || !prop.GetPhysics().IsDynamic())
+		{
+			if (m_bDebug)
+				PrintFormat("[CGS GRAB REJECT] Prop has no DYNAMIC physics. prop=%1 physics=%2", prop, prop && prop.GetPhysics());
 			return false;
+		}
 
 		// Acquire only an explicit opt-in object that no other player holds.
 		if (!grabbable.ServerTryClaim(playerId))
+		{
+			if (m_bDebug)
+				PrintFormat("[CGS GRAB REJECT] Prop declined claim (disabled, overweight, or held by another player). prop=%1", prop);
 			return false;
+		}
 
 		m_pHeld = grabbable;
 		m_iHolderPlayerId = playerId;
