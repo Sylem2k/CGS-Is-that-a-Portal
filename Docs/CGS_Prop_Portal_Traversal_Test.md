@@ -44,6 +44,28 @@
 9. In a **dedicated multiplayer test with two clients**, Player A throws the cube; Player B must see it emerge from the linked portal at the same position and direction.
 10. Confirm **players still teleport without simulated momentum**; F/V controls, Pinkifier, Blue/Orange firing, and radio G continue working.
 
+## Oct 28 follow-up: thrown cube still not traveling on sloped terrain
+
+Actual Workbench log `Pasted text(20261028-051800).txt` shows:
+- Blue slope normal `<0.574754,0.817428,0.038317>`, Orange slope normal `<0.598832,0.798442,-0.0623783>`; both are NOT horizontal wall portals or perfectly flat floor portals.
+- F grab works; V throw is confirmed repeatedly, with actual 15 m/s rigidbody velocities, e.g. `<-14.6382,-2.09292,-2.51858>`.
+- No `[CGS PORTAL PROP]`, `[CGS PORTAL PROP BLOCKED]`, or successful entry. Player simple-teleport logs are unrelated.
+- The existing prop service only accepted crossing the face-trigger plane or a *previousOutside to currentInside* footprint edge crossing, which can be missed when a thrown prop is already inside the opening volume on the first physics sample.
+
+This branch addresses that without changing player teleport or the F/V controls:
+1. The gun also watches its last thrown prop for up to 4 seconds on the **server**, and calls the *same* transfer service. This supplements the cube component's frame updates, rather than relying on a single callback.
+2. The prop service recognizes **inward motion toward a steep/sloped portal normal** when the cube is already inside its actual opening. It still rejects idle objects and props held by players.
+3. Throttled diagnostic checkpoints reveal the reason without spamming the console.
+
+### Focused retest
+
+1. Place Blue/Orange on two sloped terrain surfaces, as in the failed log; keep players away from the EXIT.
+2. Equip the gun; aim at cube, **hold F**, then **press V** while continuing to hold F, aimed toward the CENTER of Blue.
+3. Observe `[CGS PORTAL PROP TICK]` once (confirms cube component runs) and `[CGS PORTAL THROW WATCH]` after V (confirms gun actively tracks the thrown cube). `registeredPortals=2` confirms both paired portals are available.
+4. When near a portal, expect `[CGS PORTAL PROP CHECK]` (explains side/up/depth/velocity), `[CGS PORTAL PROP CANDIDATE]`, or `[CGS PORTAL PROP BLOCKED]`. A successful pass prints `[CGS PORTAL PROP]`.
+5. If it still fails, send those exact lines from the **server log**. The numbers now distinguish wrong aim/missing crossing, portal registry failure, exit obstruction and a missing prop frame callback. Do not revise cube model/mesh GUID again.
+6. Only after offline works, test with 2 clients in dedicated MP to verify shared object position.
+
 ## Debug messages
 
 - `[CGS GRAB THROW]` — server launched the held cube with native rigidbody physics.
