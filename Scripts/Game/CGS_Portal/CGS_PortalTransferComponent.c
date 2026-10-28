@@ -47,6 +47,19 @@ class CGS_PortalTransferComponent : ScriptComponent
 		bool isFloorLoopExit;
 		if (s_mFloorLoopExits.Find(character, isFloorLoopExit) && isFloorLoopExit && !Replication.IsRunning())
 		{
+			// Players must be free to WALK away from the floor exit.
+			// Failing to clear protection outside its catch area would
+			// permanently block that color even after a canceled lift.
+			if (!portal.IsWithinExitCaptureArea(character.GetOrigin()))
+			{
+				s_mProtectedExitPortals.Remove(character);
+				s_mExitProtectionStarted.Remove(character);
+				s_mFloorLoopExits.Remove(character);
+				if (portal.IsDebugEnabled())
+					PrintFormat("[CGS FLOOR LOOP] Player left exit area; normal entry rearmed color=%1", portal.GetPortalID());
+				return false;
+			}
+
 			// Do not let the ascent re-enter immediately. Once the
 			// player has had time to reach the apex, permit entry
 			// only near the surface again while descending.
