@@ -33,6 +33,17 @@ class CGS_GrabGunComponent : ScriptComponent
 	protected vector m_vAimDirection;
 	protected int m_iLastAimUpdateMs;
 
+	// A throwing gun already receives reliable server FRAME updates,
+	// while an idle physics prop may stop ticking when the rigidbody
+	// sleeps. Watch the most recently thrown object for four seconds.
+	// This supplements the grabbable's own tick; the transfer service
+	// guards against duplicate crossings.
+	protected CGS_GrabbableComponent m_pRecentThrown;
+	protected vector m_vRecentThrownPosition;
+	protected int m_iRecentThrownSampleMs;
+	protected int m_iRecentThrownUntilMs;
+	protected int m_iRecentThrownLogMs;
+
 	override void OnPostInit(IEntity owner)
 	{
 		super.OnPostInit(owner);
@@ -205,6 +216,15 @@ class CGS_GrabGunComponent : ScriptComponent
 			return false;
 		}
 
+		// Start tracking before dropping the weapon's held reference.
+		// The cube is already server-owned and released from the hold
+		// velocity controller, so normal rigidbody motion can continue.
+		m_pRecentThrown = m_pHeld;
+		m_vRecentThrownPosition = prop.GetOrigin();
+		m_iRecentThrownSampleMs = GetGame().GetWorld().GetWorldTime();
+		m_iRecentThrownUntilMs = m_iRecentThrownSampleMs + 4000;
+		m_iRecentThrownLogMs = m_iRecentThrownSampleMs - 1000;
+
 		m_pHeld.ServerRelease(playerId);
 		m_pHeld = null;
 		m_iHolderPlayerId = -1;
@@ -230,9 +250,60 @@ class CGS_GrabGunComponent : ScriptComponent
 		m_iHolderPlayerId = -1;
 	}
 
+	// One gun tick after V performs the same server-side portal check as
+	// the cube's own script tick. This makes V throws observable even
+	// when the cube's component is not receiving FRAME events.
+	protected void CGS_UpdateRecentThrown()
+	{
+		if (!m_pRecentThrown || !GetGame())
+			return;
+
+		int nowMs = GetGame().GetWorld().GetWorldTime();
+		IEntity prop = m_pRecentThrown.GetOwner();
+		if (nowMs > m_iRecentThrownUntilMs || !prop || prop.IsDeleted() || m_pRecentThrown.ServerIsGrabbed())
+		{
+			m_pRecentThrown = null;
+			return;
+		}
+
+		vector position = prop.GetOrigin();
+		int elapsedMs = nowMs - m_iRecentThrownSampleMs;
+		if (elapsedMs > 0 && elapsedMs <= 250)
+		{
+			if (CGS_PortalPropTransferService.TryTransfer(m_pRecentThrown, m_vRecentThrownPosition, position, elapsedMs, nowMs))
+			{
+				if (m_bDebug)
+					PrintFormat("[CGS PORTAL THROW WATCH] transfer succeeded at %1", prop.GetOrigin());
+				m_pRecentThrown = null;
+				return;
+			}
+		}
+
+		if (m_bDebug && nowMs - m_iRecentThrownLogMs >= 750)
+		{
+			m_iRecentThrownLogMs = nowMs;
+			ref array<CGS_PortalComponent> portals = {};
+			CGS_PortalManagerComponent.GetActivePortals(portals);
+			Physics body = prop.GetPhysics();
+			vector velocity = vector.Zero;
+			if (body)
+				velocity = body.GetVelocity();
+			PrintFormat("[CGS PORTAL THROW WATCH] prop=%1 pos=%2 velocity=%3 registeredPortals=%4 timeLeftMs=%5",
+				prop, position, velocity, portals.Count(), m_iRecentThrownUntilMs - nowMs);
+		}
+
+		m_vRecentThrownPosition = prop.GetOrigin();
+		m_iRecentThrownSampleMs = nowMs;
+	}
+
 	override void EOnFrame(IEntity owner, float timeSlice)
 	{
-		if (!Replication.IsServer() || !m_pHeld || !GetGame())
+		if (!Replication.IsServer() || !GetGame())
+			return;
+
+		CGS_UpdateRecentThrown();
+
+		if (!m_pHeld)
 			return;
 
 		PlayerManager players = GetGame().GetPlayerManager();
