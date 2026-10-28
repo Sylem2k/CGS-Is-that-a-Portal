@@ -125,6 +125,66 @@ offline floor flight position driver**, not ordinary player teleport:
 Do not present real ballistic flight as verified until player origin logs
 and visible motion agree.
 
+## Oct 28, 06:10 follow-up — native character transform is rejected
+
+The uploaded `Pasted text(20261028-061015).txt` proves PR #63's
+direct character transform approach does NOT work:
+
+- Entry and exit both work, and `Start AFTER ARRIVAL` is logged.
+- `[CGS FLOOR FLIGHT] tick=1 ... plannedY=7.32161 beforeY=7.20754
+  afterY=7.20754 step=0.114072` confirms **zero actual movement** despite
+  requested rise.
+- Followed by `[CGS FLOOR LOOP] Cancel: character transform refused
+  movement`.
+- The same failure reproduces for the reverse portal direction.
+- The cube still passes through portals, confirming only player
+  character movement requires a different engine path.
+
+### This branch's OFFLINE experiment
+
+**Do NOT use `IEntity.SetWorldTransform` / `BaseGameEntity.Teleport`
+for small player movement; neither produced sustained altitude.**
+
+This branch uses `SCR_Global.TeleportLocalPlayer`, which previously
+successfully moved the host-owned player in the main portal transfer.
+It sends bounded, collision-swept, upward-only *local teleport pulses*
+at **most once per 75 ms**. Each step is at most **0.28 meters**;
+the actual engine-applied position is inspected at least 70ms after
+the request, since teleport is asynchronous.
+
+- This is a **player movement feasibility test**, NOT a fully
+  physics-driven Portal momentum controller. It may be visibly stepped.
+  Do not claim smooth ballistic physics until Workbench proves it.
+- `[CGS FLOOR TP PULSE] n=... accepted=... actualBefore=... requested=...
+  plannedY=...` is the outgoing host teleport.
+- `[CGS FLOOR TP VERIFY] requestY=... startY=... actualY=... moved=...
+  failures=...` shows whether the owned character really went UP.
+- 3 consecutive ineffective pulses cancel the mode.
+- When the loop reaches its apex, it still prints
+  `[CGS FLOOR LOOP] Apex ... peakObservedY ... expectedApexY`.
+- Retains PR #62 arrival wait, 3m lateral escape, 7m/s launch cap,
+  solid obstacle sweep, and OFFLINE-only `!Replication.IsRunning()` guard.
+- Native gravity resumes when upward motion ends; no change to
+  camera roll, controller state or existing cube physics.
+
+### Required Workbench retest
+
+1. Sync this branch, compile Game scripts; two FLAT upward floor
+   portals with at least 5m headroom.
+2. Walk into Blue, stop moving. Confirm
+   `[CGS FLOOR LOOP] Start AFTER ARRIVAL`.
+3. Expect `[CGS FLOOR TP PULSE] accepted=1` and then
+   `[CGS FLOOR TP VERIFY] moved=1` with increased actual Y.
+4. Verify visually that the character rises. If `accepted=1`
+   but `moved=0` repeatedly, the local-only helper is insufficient
+   and we will use an engine-supported movement-mode integration.
+5. At `Apex`, verify `peakObservedY - startY` is positive,
+   ideally 0.5m or more for the 4.5m/s starter launch.
+6. Check normal controls, falling back through the exit, sideways
+   escape, both portal directions, F/V cube throw, wall portals.
+7. **No multiplayer testing yet**; this mode never runs in MP.
+   Report the PULSE / VERIFY logs if flight is not visible.
+
 ## Workbench test — player (not the cube)
 
 1. Sync test branch, compile Game scripts and load the same `unnamed.ent` test world.

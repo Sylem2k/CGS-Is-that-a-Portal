@@ -40,6 +40,16 @@ class CGS_PortalMomentumState : Managed
 	float m_fFloorInitialUpwardSpeed;
 	float m_fFloorHighestObservedY;
 	int m_iFloorStalledFrames;
+
+	// Offline character movement is owned by the local player controller.
+	// Direct entity transforms and rigidbody SetVelocity are rejected.
+	// The stock local player teleport is the only verified movement path;
+	// apply short, collision-checked, rate-limited flight pulses through it.
+	int m_iLastFloorTeleportPulseMs;
+	float m_fFloorPulseBeforeY;
+	float m_fFloorPulseTargetY;
+	bool m_bFloorPulseNeedsCheck;
+	int m_iFloorPulseFailures;
 }
 
 //------------------------------------------------------------------------------------------------
@@ -315,6 +325,9 @@ class CGS_PortalMomentumService
 				state.m_iArmedAtMs = now;
 				state.m_iExpireMs = now + state.m_iFloorLiftDurationMs;
 				state.m_fFloorHighestObservedY = state.m_vLoopStart[1];
+				state.m_iLastFloorTeleportPulseMs = now - 80;
+				state.m_iFloorPulseFailures = 0;
+				state.m_bFloorPulseNeedsCheck = false;
 				if (state.m_bDebug)
 					PrintFormat("[CGS FLOOR LOOP] Start AFTER ARRIVAL character=%1 origin=%2 expected=%3 upward=%4",
 						character, state.m_vLoopStart, state.m_vExpectedFloorExit, state.m_vVirtualVelocity[1]);
@@ -343,31 +356,55 @@ class CGS_PortalMomentumService
 
 			if (state.m_bSafeFloorLoop)
 			{
-				// The old version added only a tiny relative delta by
-				// BaseGameEntity.Teleport(). The local character controller
-				// reset that correction the next simulation frame. In the
-				// actual log the requested launch was 4.5m/s but the
-				// character was at or BELOW its exit 350ms later.
-				//
-				// Instead use a single deterministic vertical flight
-				// trajectory anchored AFTER the engine teleport settles:
-				// h(t) = h0 + v0*t - 0.5*g*t*t.
-				// Apply an ABSOLUTE position correction via the same
-				// IEntity.SetWorldTransform that the teleport service
-				// already supports. This is OFFLINE only.
+				// The user's latest Workbench log proves that calling
+				// SetWorldTransform directly on a native character
+				// controller moves NOTHING (afterY == beforeY). The
+				// engine-owned SCR_Global.TeleportLocalPlayer path
+				// DOES place the character at a requested location,
+				// albeit on a later frame. Use this supported path in
+				// OFFLINE-only short pulses until we can integrate a
+				// genuine character-controller flight mode.
 				vector currentOrigin = character.GetOrigin();
 				state.m_fFloorHighestObservedY = Math.Max(state.m_fFloorHighestObservedY, currentOrigin[1]);
+				int pulseAgeMs = now - state.m_iLastFloorTeleportPulseMs;
 
-				int flightAgeMs = now - state.m_iArmedAtMs;
-				float flightSeconds = Math.Max(0.0, flightAgeMs * 0.001);
-				float speedNow = state.m_fFloorInitialUpwardSpeed - state.m_fGravity * flightSeconds;
+				// A completed stock teleport updates the native
+				// character's position on a later update, never
+				// immediately after the function call. Check it only
+				// after 70ms, not on the same frame.
+				if (state.m_bFloorPulseNeedsCheck && pulseAgeMs >= 70)
+				{
+					float actualY = currentOrigin[1];
+					bool movedUp = actualY > state.m_fFloorPulseBeforeY + 0.025;
+					if (movedUp)
+						state.m_iFloorPulseFailures = 0;
+					else
+						state.m_iFloorPulseFailures++;
+
+					if (state.m_bDebug)
+						PrintFormat("[CGS FLOOR TP VERIFY] requestY=%1 startY=%2 actualY=%3 moved=%4 failures=%5",
+							state.m_fFloorPulseTargetY, state.m_fFloorPulseBeforeY, actualY,
+							movedUp, state.m_iFloorPulseFailures);
+					state.m_bFloorPulseNeedsCheck = false;
+
+					if (state.m_iFloorPulseFailures >= 3)
+					{
+						if (state.m_bDebug)
+							Print("[CGS FLOOR LOOP] Cancel: engine rejected repeated local teleport pulses.");
+						s_aActive.RemoveOrdered(i);
+						continue;
+					}
+				}
+
+				float flightSeconds = Math.Max(0.0, (now - state.m_iArmedAtMs) * 0.001);
+				float desiredUp = state.m_fFloorInitialUpwardSpeed - state.m_fGravity * flightSeconds;
 				float plannedY = state.m_vLoopStart[1] + state.m_fFloorInitialUpwardSpeed * flightSeconds -
 					0.5 * state.m_fGravity * flightSeconds * flightSeconds;
 
-				if (speedNow <= 0)
+				if (desiredUp <= 0)
 				{
 					if (state.m_bDebug)
-						PrintFormat("[CGS FLOOR LOOP] Apex: ticks=%1 startY=%2 peakObservedY=%3 expectedApexY=%4",
+						PrintFormat("[CGS FLOOR LOOP] Apex: pulses=%1 startY=%2 peakObservedY=%3 expectedApexY=%4",
 							state.m_iTicks, state.m_vLoopStart[1], state.m_fFloorHighestObservedY,
 							state.m_vLoopStart[1] + 0.5 * state.m_fFloorInitialUpwardSpeed *
 							state.m_fFloorInitialUpwardSpeed / state.m_fGravity);
@@ -375,9 +412,9 @@ class CGS_PortalMomentumService
 					continue;
 				}
 
-				vector driftFromStart = currentOrigin - state.m_vLoopStart;
-				driftFromStart[1] = 0;
-				if (driftFromStart.LengthSq() > 9.0)
+				vector sideways = currentOrigin - state.m_vLoopStart;
+				sideways[1] = 0;
+				if (sideways.LengthSq() > 9.0)
 				{
 					if (state.m_bDebug)
 						Print("[CGS FLOOR LOOP] Cancel: player moved away from exit.");
@@ -385,29 +422,29 @@ class CGS_PortalMomentumService
 					continue;
 				}
 
-				// Ground/controller correction is typically downward.
-				// Fight only the lost UPWARD travel; never force a
-				// downward teleport or fight horizontal player input.
-				float neededRise = plannedY - currentOrigin[1];
-				if (neededRise <= 0.004)
+				// One owner-local update every 75ms, never a teleport
+				// per rendered frame. No horizontal steering override.
+				if (pulseAgeMs < 75)
 					continue;
 
-				// Allow a limited catch-up if the native controller
-				// changed our position between frames. This is not
-				// the legacy all-axis momentum correction.
-				float riseStep = Math.Min(neededRise, 0.28);
-				vector targetOrigin = currentOrigin + Vector(0, riseStep, 0);
+				// This does not try to move the character downwards;
+				// after the apex native gravity handles the fall.
+				float missingRise = plannedY - currentOrigin[1];
+				if (missingRise < 0.04)
+					continue;
 
-				// An upward-only torso sweep protects the player from
-				// ceilings, static geometry, and other entities.
-				TraceSphere safeSweep = new TraceSphere();
-				safeSweep.Start = currentOrigin + Vector(0, 0.95, 0);
-				safeSweep.End = targetOrigin + Vector(0, 0.95, 0);
-				safeSweep.Radius = 0.30;
-				safeSweep.Exclude = character;
-				safeSweep.Flags = TraceFlags.WORLD | TraceFlags.ENTS;
+				// Limit step size so teleports cannot pass a ceiling
+				// or cause the old high-speed/uncapped "yeet".
+				float rise = Math.Min(missingRise, 0.28);
+				vector target = currentOrigin + Vector(0, rise, 0);
 
-				if (world.TraceMove(safeSweep, null) < 0.999)
+				TraceSphere upwardSweep = new TraceSphere();
+				upwardSweep.Start = currentOrigin + Vector(0, 0.95, 0);
+				upwardSweep.End = target + Vector(0, 0.95, 0);
+				upwardSweep.Radius = 0.30;
+				upwardSweep.Exclude = character;
+				upwardSweep.Flags = TraceFlags.WORLD | TraceFlags.ENTS;
+				if (world.TraceMove(upwardSweep, null) < 0.999)
 				{
 					if (state.m_bDebug)
 						Print("[CGS FLOOR LOOP] Cancel: upward path blocked.");
@@ -415,34 +452,33 @@ class CGS_PortalMomentumService
 					continue;
 				}
 
-				vector nextMatrix[4];
-				character.GetWorldTransform(nextMatrix);
-				nextMatrix[3] = targetOrigin;
-
-				// CharacterController-owned actors may not honor
-				// BaseGameEntity.Teleport as an instantaneous per-frame
-				// correction. Transform the actual locally simulated
-				// character instead; check the resulting position.
-				character.SetWorldTransform(nextMatrix);
-				float afterY = character.GetOrigin()[1];
-				state.m_iTicks++;
-
-				if (afterY < currentOrigin[1] + riseStep * 0.25)
-					state.m_iFloorStalledFrames++;
-				else
-					state.m_iFloorStalledFrames = 0;
-
-				if (state.m_bDebug && (state.m_iTicks == 1 || state.m_iTicks % 8 == 0))
-					PrintFormat("[CGS FLOOR FLIGHT] tick=%1 t=%2 plannedY=%3 beforeY=%4 afterY=%5 step=%6",
-						state.m_iTicks, flightSeconds, plannedY, currentOrigin[1], afterY, riseStep);
-
-				// Stop if even the direct transform is refused. A
-				// failure is diagnosed, not hidden by an Apex log.
-				if (state.m_iFloorStalledFrames >= 4)
+				// Do not touch other/offline spectator-controlled
+				// characters. The host must own THIS character.
+				int localPlayerId = SCR_PlayerController.GetLocalPlayerId();
+				PlayerManager manager = GetGame().GetPlayerManager();
+				if (!manager || localPlayerId < 1 || manager.GetPlayerControlledEntity(localPlayerId) != character)
 				{
 					if (state.m_bDebug)
-						PrintFormat("[CGS FLOOR LOOP] Cancel: character transform refused movement. current=%1 expectedY=%2",
-							character.GetOrigin(), plannedY);
+						Print("[CGS FLOOR LOOP] Cancel: missing owner-local player.");
+					s_aActive.RemoveOrdered(i);
+					continue;
+				}
+
+				bool accepted = SCR_Global.TeleportLocalPlayer(target);
+				state.m_iLastFloorTeleportPulseMs = now;
+				state.m_fFloorPulseBeforeY = currentOrigin[1];
+				state.m_fFloorPulseTargetY = target[1];
+				state.m_bFloorPulseNeedsCheck = accepted;
+				state.m_iTicks++;
+
+				if (state.m_bDebug)
+					PrintFormat("[CGS FLOOR TP PULSE] n=%1 accepted=%2 actualBefore=%3 requested=%4 plannedY=%5",
+						state.m_iTicks, accepted, currentOrigin, target, plannedY);
+
+				if (!accepted)
+				{
+					if (state.m_bDebug)
+						Print("[CGS FLOOR LOOP] Cancel: engine rejected TeleportLocalPlayer request.");
 					s_aActive.RemoveOrdered(i);
 				}
 				continue;
