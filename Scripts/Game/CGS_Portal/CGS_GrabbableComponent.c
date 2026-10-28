@@ -44,7 +44,7 @@ class CGS_GrabbableComponent : ScriptComponent
 
 	override void EOnFrame(IEntity owner, float timeSlice)
 	{
-		if (!Replication.IsServer() || !owner || owner.IsDeleted())
+		if (!Replication.IsServer() || !GetGame() || !owner || owner.IsDeleted())
 			return;
 
 		int nowMs = GetGame().GetWorld().GetWorldTime();
