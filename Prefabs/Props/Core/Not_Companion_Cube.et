@@ -5,6 +5,7 @@ GenericEntity {
    Object "{CA6F3A1C49398AA7}Common/Models/NotCompaCube.xob"
   }
   RigidBody "{6AB840A2F1C631FE}" {
+   Enabled 0
    Static 1
   }
   CGS_GrabbableComponent "{6AB840A2AE4E71B3}" {
