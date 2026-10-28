@@ -5,18 +5,19 @@
 ## Goal
 
 - Keep existing Portal Gun **LMB = Blue** and **MMB = Orange** unchanged.
-- **Hold G** while pointing at an opt-in, dynamic physics prop to pull it toward the camera.
-- Keep holding G to carry it roughly **2.5m** ahead of the camera.
-- **Release G** to drop it. The physics object resumes regular simulation.
+- **Hold F** while pointing at an opt-in, dynamic physics prop to pull it toward the camera.
+- Keep holding F to carry it roughly **2.5m** ahead of the camera.
+- **Release F** to drop it. The physics object resumes regular simulation.
+- **Tap V while holding F** to throw the held object at the default 15 m/s; a server-validated reliable RPC sets the rigidbody velocity.
 - Other players cannot claim the same object at the same time.
-- No teleporting grabbed entities, no player grab, no vehicle grab, no throw yet.
+- No teleporting grabbed entities, no player grab, no vehicle grab, V to throw an already held object.
 
 ## Added components
 
 - `Scripts/Game/CGS_Portal/CGS_GrabbableComponent.c`: attach to the **root** of any permitted prop.
 - `Scripts/Game/CGS_Portal/CGS_GrabGunComponent.c`: already installed on the existing Portal Gun prefab.
 - `Scripts/Game/CGS_Portal/CGS_GrabService.c`: server-only dynamic-physics pull.
-- `Configs/System/chimeraInputCommon.conf`: adds a hold-style `CGSPortalGunGrab` action bound to `keyboard:KC_G`.
+- `Configs/System/chimeraInputCommon.conf`: adds a hold-style `CGSPortalGunGrab` action bound to `keyboard:KC_F`.
 
 ## Make a temporary test object
 
@@ -31,16 +32,16 @@ Until the custom CGS Relay Core model is imported:
 ## Tests
 
 1. **Game-script compile:** verify that all three new classes compile, input config loads, and weapon prefab instantiates with the grab component.
-2. **Offline basic:** look at the test crate from 2–6m. Hold G. Expect `[CGS GRAB] Started`, the crate to physically approach, then to follow the aim. Release G, expect `[CGS GRAB] Released`, then gravity.
+2. **Offline basic:** look at the test crate from 2–6m. Hold F. Expect `[CGS GRAB] Started`, the crate to physically approach, then to follow the aim. Release F, expect `[CGS GRAB] Released`, then gravity.
 3. **Rejection:** aim at world terrain, characters, a vehicle, static crate, or another object without the component. No grab should occur.
 4. **Collision:** face a wall while carrying. The crate should **not teleport through the wall**. It may collide, stop or release if it gets too far away.
 5. **Ownership:** on a dedicated server, Player A grabs the crate. Player B tries to grab the same crate; B must fail. A releases, then B can grab.
-6. **Weapon swap:** while holding G, put away the Portal Gun or disconnect. The grab should release automatically.
+6. **Weapon swap:** while holding F, put away the Portal Gun or disconnect. The grab should release automatically.
 7. **Regression:** shoot Blue with LMB and Orange with MMB. Pinkifier and portal teleportation must still work.
 
 ## Current limitations and next phase
 
-- The first version pulls/holds/drops only; **push/throw is not implemented yet**.
+- The first version pulls/holds/drops only; **push/throw is now implemented with V while holding F**.
 - No custom Relay Core cube mesh is included in this phase; once physics is verified, import an original crate/cube model and add this **same component** to it.
 - High-latency carry may jitter: target aim arrives at roughly 8 updates per second; server drives physics; clients observe physics replication.
 - Grabbing only supports world-space, dynamic physics props. Inventory items, static map geometry, players and vehicles are explicitly unsupported.
