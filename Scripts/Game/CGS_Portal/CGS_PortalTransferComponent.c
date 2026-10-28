@@ -14,6 +14,11 @@ class CGS_PortalTransferComponent : ScriptComponent
 	protected static ref map<IEntity, CGS_PortalComponent> s_mProtectedExitPortals = new map<IEntity, CGS_PortalComponent>();
 	protected static ref map<IEntity, int> s_mExitProtectionStarted = new map<IEntity, int>();
 
+	// The OFFLINE floor-to-floor gravity experiment must re-arm the
+	// same exit portal on descent. Normal teleport-only mode keeps
+	// its original full-area reentry suppression.
+	protected static ref map<IEntity, bool> s_mFloorLoopExits = new map<IEntity, bool>();
+
 	// Dedicated MP: one successful transfer can take several network
 	// frames to update the server-observed position. The source portal
 	// must not re-issue the same teleport while its character still
@@ -39,6 +44,42 @@ class CGS_PortalTransferComponent : ScriptComponent
 		if (s_mExitProtectionStarted.Find(character, protectedSince) && now - protectedSince < 400)
 			return true;
 
+		bool isFloorLoopExit;
+		if (s_mFloorLoopExits.Find(character, isFloorLoopExit) && isFloorLoopExit && !Replication.IsRunning())
+		{
+			// Do not let the ascent re-enter immediately. Once the
+			// player has had time to reach the apex, permit entry
+			// only near the surface again while descending.
+			vector loopRight;
+			vector loopUp;
+			vector loopNormal;
+			portal.GetPortalBasis(loopRight, loopUp, loopNormal);
+			float exitDepth = vector.Dot(character.GetOrigin() - portal.GetOwner().GetOrigin(), loopNormal);
+
+			if (now - protectedSince >= 850 && exitDepth <= 1.25)
+			{
+				ChimeraCharacter loopCharacter = ChimeraCharacter.Cast(character);
+				CharacterControllerComponent loopController;
+				if (loopCharacter)
+					loopController = loopCharacter.GetCharacterController();
+
+				// Controller vertical speed may be briefly zero after a
+				// safe teleport. Accept a delayed fall even if that
+				// speed sample is stale, but never during initial ascent.
+				if ((loopController && loopController.GetVelocity()[1] < -0.35) || now - protectedSince >= 1500)
+				{
+					s_mProtectedExitPortals.Remove(character);
+					s_mExitProtectionStarted.Remove(character);
+					s_mFloorLoopExits.Remove(character);
+					if (portal.IsDebugEnabled())
+						PrintFormat("[CGS FLOOR LOOP] Exit rearmed for descent player=%1 depth=%2 elapsed=%3",
+							character, exitDepth, now - protectedSince);
+					return false;
+				}
+			}
+			return true;
+		}
+
 		// Re-arm only AFTER they have left the portal's full catch area.
 		// For upward floor portals, this includes the optional expanded
 		// FALL_ZONE that otherwise causes automatic Blue<->Orange loops.
@@ -47,6 +88,7 @@ class CGS_PortalTransferComponent : ScriptComponent
 
 		s_mProtectedExitPortals.Remove(character);
 		s_mExitProtectionStarted.Remove(character);
+		s_mFloorLoopExits.Remove(character);
 		if (portal.IsDebugEnabled())
 			PrintFormat("[CGS PORTAL REENTRY] Player cleared exit area: portal=%1; re-entry armed", portal.GetPortalID());
 		return false;
@@ -113,6 +155,7 @@ class CGS_PortalTransferComponent : ScriptComponent
 		{
 			s_mProtectedExitPortals.Remove(character);
 			s_mExitProtectionStarted.Remove(character);
+			s_mFloorLoopExits.Remove(character);
 			s_mProtectedSourcePortals.Remove(character);
 			s_mSourceProtectionStarted.Remove(character);
 		}
@@ -286,6 +329,7 @@ class CGS_PortalTransferComponent : ScriptComponent
 		// Walking onto a floor portal still teleports, but never converts
 		// horizontal walking/network speed into a vertical launch.
 		bool verticalLoop = sourceNormal[1] > 0.75 && exitNormal[1] > 0.75;
+		bool safeOfflineFloorLoop = verticalLoop && destination.IsFloorGravityLoopEnabled() && !Replication.IsRunning();
 		if (verticalLoop)
 		{
 			float downwardEntrySpeed = -incomingVelocity[1];
@@ -333,7 +377,17 @@ class CGS_PortalTransferComponent : ScriptComponent
 		// launch velocity to the owner; safe teleport restores normal
 		// walking/gravity without velocity corrections after arrival.
 		bool teleportOnly = !destination.ShouldPreserveMomentum() && !destination.ShouldSimulateMomentum();
-		if (teleportOnly)
+		if (safeOfflineFloorLoop)
+		{
+			// A walk into a floor portal needs a small launch or the
+			// player merely appears stationary at the exit. A genuine
+			// fall retains more speed, but both are strictly capped.
+			float incomingFall = Math.Max(0.0, -incomingVelocity[1]);
+			float launch = Math.Clamp(incomingFall,
+				destination.GetFloorLoopMinSpeed(), destination.GetFloorLoopMaxSpeed());
+			outgoingVelocity = Vector(0, launch, 0);
+		}
+		else if (teleportOnly)
 			outgoingVelocity = vector.Zero;
 
 		if (source.IsDebugEnabled() || destination.IsDebugEnabled())
@@ -442,7 +496,15 @@ class CGS_PortalTransferComponent : ScriptComponent
 		// The opt-in momentum service provides simulated inertia for player
 		// controllers that reject Physics.SetVelocity(). When disabled,
 		// clear existing state and retain the stable gravity-loop behavior.
-		if (destination.ShouldSimulateMomentum())
+		if (safeOfflineFloorLoop)
+		{
+			// New restricted vertical-only mode, NOT the old high-speed
+			// all-axis virtual momentum that left players immobilized.
+			CGS_PortalMomentumService.StartFloorLoop(
+				character, outgoingVelocity[1], destination.GetFloorLoopTimeout(),
+				source.IsDebugEnabled() || destination.IsDebugEnabled());
+		}
+		else if (destination.ShouldSimulateMomentum())
 		{
 			CGS_PortalMomentumService.Start(
 				character,
@@ -459,7 +521,7 @@ class CGS_PortalTransferComponent : ScriptComponent
 			CGS_PortalMomentumService.Stop(character);
 		}
 
-		if (teleportOnly && (source.IsDebugEnabled() || destination.IsDebugEnabled()))
+		if (teleportOnly && !safeOfflineFloorLoop && (source.IsDebugEnabled() || destination.IsDebugEnabled()))
 			PrintFormat("[CGS PORTAL TELEPORT ONLY] player=%1 source=%2 exit=%3 launchVelocity=%4",
 				playerId, source.GetPortalID(), destination.GetPortalID(), outgoingVelocity);
 
@@ -483,6 +545,7 @@ class CGS_PortalTransferComponent : ScriptComponent
 		// character again until they have left its catch volume.
 		s_mProtectedExitPortals.Set(character, destination);
 		s_mExitProtectionStarted.Set(character, now);
+		s_mFloorLoopExits.Set(character, safeOfflineFloorLoop);
 		if (source.IsDebugEnabled() || destination.IsDebugEnabled())
 			PrintFormat("[CGS PORTAL REENTRY] Protected character=%1 from immediate re-entry at exit portal=%2", character, destination.GetPortalID());
 
