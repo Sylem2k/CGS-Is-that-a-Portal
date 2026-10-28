@@ -1,6 +1,6 @@
-GenericEntity : "{1B677D5095315BED}Prefabs/Weapons/Core/Portal_Gun_.et" {
- coords 82.665 5.475 66.856
+GenericEntity : "{6AB2F1A000000200}Prefabs/Weapons/Core/Pinkifier_Gun.et" {
+ coords 199.947 1.562 100.211
 }
 GenericEntity : "{E4CC81B24CC91AB3}Prefabs/Props/Core/Not_Companion_Cube.et" {
- coords 81.277 4.971 67.034
+ coords 202.517 1 101.97
 }
