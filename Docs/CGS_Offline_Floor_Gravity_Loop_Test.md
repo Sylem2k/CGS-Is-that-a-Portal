@@ -21,6 +21,50 @@ This improves the *player* floor-to-floor experience **without re-enabling the b
 - Floor exit is protected during initial ascent. When descending and near the opening again (depth <= 1.25m; at least 850ms after exit), it can re-enter. 1.5s fallback handles stale native vertical velocity.
 - Character remains upright: no roll/camera inversion. True camera orientation flips for wall/floor or ceiling exits are a separate future feature.
 
+## Oct 28 regression fix — wait for player teleport to complete
+
+The user's attached offline Workbench log `Pasted text(20261028-055104).txt`
+shows the loop attempt was triggering and then canceling almost
+immediately:
+
+- `[CGS FLOOR LOOP] Armed ... launchUp=4.5m/s`.
+- `[CGS PORTAL HOST TELEPORT] ... accepted=1 ... after=<old source position>`
+  shows the engine had accepted the teleport but the character transform
+  had not been updated **yet**.
+- `[CGS FLOOR LOOP] Start` immediately recorded that **source** position.
+- On the next frame, the player appeared near the exit, several meters
+  away from the recorded start, and the helper reported
+  `[CGS FLOOR LOOP] Cancel: player moved away from exit.`.
+- Around 350ms later `[CGS PORTAL MP CONFIRM]` verified the character
+  near the intended destination.
+
+**Fix:** `StartFloorLoop` now receives the authorized exit position and
+holds the vertical correction **pending** for up to 650ms until the actual
+player transform is near that position (X/Z within 0.85m; Y within
+1.65m). It requires two near-exit frame samples, then records the real
+arrival position as the sideways-escape anchor and starts the full lift
+duration from that moment. No position corrections run at the old
+portal. A missed or failed teleport cancels without moving anyone.
+
+### Specific log checks
+
+1. Walk into either floor portal while both faces point UP.
+2. Expect `[CGS FLOOR LOOP] Pending arrival ... old=... expectedExit=...`.
+3. Then `[CGS FLOOR LOOP] Start AFTER ARRIVAL ... origin=... expected=...`.
+4. At this point expect lift movement followed by
+   `[CGS FLOOR LOOP] Apex ...`, not a premature escape cancel.
+5. `[CGS FLOOR LOOP] Cancel: teleport arrival timeout` indicates a
+   teleport never visibly settled near the requested exit.
+6. Test walking >3m SIDEWAYS **after arrival**; only then should
+   `Cancel: player moved away from exit` appear.
+7. Confirm player can walk, look, fall, and re-enter without freezing.
+   Send the full `[CGS FLOOR LOOP]` and `[CGS PORTAL MP CONFIRM]`
+   lines if any step differs.
+
+This fixes the confirmed **launch-start timing**, not yet complete
+three-axis portal momentum or camera orientation. The cube's working
+native-physics transfer remains unchanged.
+
 ## Workbench test — player (not the cube)
 
 1. Sync test branch, compile Game scripts and load the same `unnamed.ent` test world.

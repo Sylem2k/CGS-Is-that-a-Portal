@@ -518,8 +518,11 @@ class CGS_PortalTransferComponent : ScriptComponent
 		{
 			// New restricted vertical-only mode, NOT the old high-speed
 			// all-axis virtual momentum that left players immobilized.
+			// TeleportPlayer / TeleportLocalPlayer can finish on a LATER
+			// update. Supply the approved destination so the flight
+			// helper waits for arrival instead of anchoring to source.
 			CGS_PortalMomentumService.StartFloorLoop(
-				character, outgoingVelocity[1], destination.GetFloorLoopTimeout(),
+				character, destinationPosition, outgoingVelocity[1], destination.GetFloorLoopTimeout(),
 				source.IsDebugEnabled() || destination.IsDebugEnabled());
 		}
 		else if (destination.ShouldSimulateMomentum())
