@@ -1,5 +1,23 @@
 # Offline gravity loop — first controlled player test
 
+> **Latest handoff (2026-10-28):** [CGS_Portal_Development_Handoff_20261028.md](CGS_Portal_Development_Handoff_20261028.md) is the current source of truth. Previous investigation notes below are retained for history, including failed experimental movement paths.
+
+## 2026-10-28 near-surface catch / smoother return test
+
+I have confirmed **real upward player movement and repeated automatic FALL_ZONE loops**, but the latest video still looks glitchy. The 20261028-062048 log contains 43 apex events, 15 measured early return re-arms all around depth **2.56–2.70m**, and 27 `Player left exit area` events (often immediately after apex). My old re-arm check treated rising ABOVE the fall zone like a sideways escape, and it rearmed/caught returning players far above the portal oval.
+
+This targeted PR:
+- Keeps **vertical ascent protected**, even when above the rescue height. Only a real sideways escape should clear protection early.
+- Uses `IsWithinExitCatchFootprint()` to check portal-plane offset without conflating it with height.
+- For downward return, requires **measured descent** after lift, and re-arms at **0.35–1.10m** from the portal face instead of ~2.7m.
+- Leaves proven owner-local flight pulses, F/V cube teleportation, base player teleport, editor prefabs, and multiplayer disabled mode unchanged.
+- Emits `[CGS FLOOR LOOP] Descent rearmed NEAR SURFACE`. The old `Descent rearmed EARLY` message should no longer appear on this branch.
+
+**My Workbench acceptance test:** fire two upward floor portals; walk in, release movement, and see at least three automatic round trips. Check each `NEAR SURFACE` event is followed by a real `entry=FALL_ZONE`, with no road collision; moving sideways must still escape. The early 2.7m midair jump should stop. This branch is **not Workbench compiled/tested yet**.
+
+**Still pending:** smooth character movement without 75ms teleport pulse stepping, camera/view stability and exposure/PIP behavior, three-axis momentum redirection, camera rotation, and multiplayer. Do not re-enable the older broken all-axis momentum simulator.
+
+
 **STATUS: draft, not Workbench-compiled or play-tested. Do not enable on multiplayer until separately reviewed.**
 
 ## Purpose
