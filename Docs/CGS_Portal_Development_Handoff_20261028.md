@@ -79,7 +79,80 @@ destroying it may legitimately stop a PIP pass. If screens still
 flicker while camera slots stay fixed, investigate HDR matching,
 layout/material reset, and 12 FPS capture separately.
 
-## New work in progress — adaptive flight test and floor-aperture idea
+## VERIFIED: PR #68 adaptive movement, Workbench 2026-10-28 06:42
+
+I pulled and tested merged PR #68 using Arma Reforger Workbench
+1.8.0.13, in the offline `unnamed.ent` scenario. My uploaded
+`Pasted text(20261028-064258).txt` contains **981** log lines.
+
+**Actual results (do not confuse with smoothness):**
+- **108** `[CGS FLOOR TP PULSE]` movement requests, all `accepted=1`.
+- **108/108** `[CGS FLOOR TP VERIFY] moved=1` with
+  `adaptive=1`; **zero** moved=0, accepted=0, or automatic fallback.
+- Owner-local movement-ack latency **18–50ms**, average **28.5ms**,
+  median 27ms. Recorded requested step height ranges
+  **0.06–0.26m**, mean ~0.149m.
+- **8** `[CGS FLOOR LOOP] Apex` events, with actual height gained
+  **0.88–2.06m** above each start position (not merely a virtual timer).
+- **7** successful `entry=FALL_ZONE success=1` transfers and
+  **7** `Descent rearmed NEAR SURFACE` events. Recorded trigger depth
+  **0.833–1.098m** (mean **0.969m**).
+- Observed down-speed at those re-arms **5.69–9.69m/s**, with
+  exit launch deliberately capped at **7m/s**. This is still
+  a controlled floor-loop speed cap, not arbitrary momentum stacking.
+- **Zero** `[CGS FLOOR LOOP] Cancel`, no `[CGS FLOOR ADAPTIVE]`
+  fallback message, and no obvious Game script compilation failure.
+- **PIP stable:** exactly TWO `[CGS GUN PIP] LIVE` (slot 27
+  Blue, slot 26 Orange), and TWO `STOP` lines only as Workbench
+  explicitly reloads at the END (around log lines 945–948).
+  PR #67 appears to have eliminated the frequent distance-rank
+  camera stop/restart pattern in this test.
+- The final apex at log line 944 is followed by **my manual
+  Workbench reload**. This accounts for 8 apexes but only 7
+  complete return transfers; it is not a recorded loop failure.
+
+**Trajectory gap:** at 7m/s, the current adaptive assist repeatedly
+shows **~2.02–2.06m actual rise against ~2.50m ideal rise** (occasionally
+~1.88m versus 2.50m). This is a real, measurable **0.44–0.62m
+undershoot** that likely arises from asynchronous character teleports
+and native controller gravity between pulses; that causal explanation
+is a hypothesis, not yet proven. New movement code must compare
+real apex height, collision handling, and camera motion before replacing
+the successful implementation.
+
+**What this test does NOT establish:** I uploaded a LOG, not a new
+screen recording. `adaptive=1` and `moved=1` show that the intended
+movement occurs, not that the image is smooth. At 40ms (and observed
+variable acknowledgments), the host still moves via independent
+`SCR_Global.TeleportLocalPlayer` requests. Full cube-quality,
+continuous player velocity, pitch/yaw rotation and midair steering
+are NOT implemented. Do not claim the real Portal experience is finished.
+
+### Safe priorities after this verification
+
+1. Preserve all merged working features through **PR #68**, especially
+   near-surface FALL_ZONE, owner-local adaptive movement, and stable PIP.
+2. For the next actual SMOOTH-FLIGHT milestone, identify a supported
+   **character-controller-owned continuous movement/flight mode**.
+   Previous `Physics.SetVelocity`, `BaseGameEntity.Teleport` micro-moves
+   and `IEntity.SetWorldTransform` were rejected by Workbench.
+   The grappling hook in my Warfare/MechWarrior repo likewise offers a
+   scripted-position fallback and does not establish a verified native
+   flight controller API. Do NOT repeat those failed approaches.
+3. Only after verifying an engine movement API, build an opt-in,
+   collision-tested flight mode alongside the known-good adaptive
+   fallback, using the SAME destination-arrival and descent-rearm logic.
+4. My **'portal as water / real floor aperture'** idea remains
+   separate: inside the oval, intercept plane crossing just BEFORE
+   the backing RoadEntity collider, or investigate safe per-entity
+   collision filters IF verified. Never disable global terrain/road
+   collision, let unrelated players noclip, or claim a real hole
+   exists under a road prefab.
+5. Player view/camera continuity across portals and true 3D momentum
+   redirection are subsequent phases. Multiplayer remains POSTPONED
+   until stable offline behavior and no predicted-character glitches.
+
+## Historical PR #68 development plan — now merged and tested
 
 - **PR #67 is merged.** Its stable Blue/Orange PIP camera slots are in `main`; I still need an independent Workbench log proving the visible screen flicker is gone.
 - My next goal is smooth PLAYER flight like the dynamic cube, without breaking the confirmed 11-loop near-surface travel from PR #66.
