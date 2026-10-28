@@ -54,9 +54,11 @@ class CGS_PortalTransferComponent : ScriptComponent
 			if (CGS_PortalMomentumService.IsFloorLoopActive(character))
 				return true;
 
-			// A player who genuinely leaves the exit volume by moving
-			// sideways or rising beyond the rescue prism may return later.
-			if (!portal.IsWithinExitCaptureArea(character.GetOrigin()))
+			// LATERAL escape only. A player rising straight UP through
+			// the top of the rescue volume has NOT left the portal's
+			// horizontal footprint: re-arming there causes an early
+			// FALL_ZONE catch while still high above the surface.
+			if (!portal.IsWithinExitCatchFootprint(character.GetOrigin()))
 			{
 				s_mProtectedExitPortals.Remove(character);
 				s_mExitProtectionStarted.Remove(character);
@@ -83,7 +85,11 @@ class CGS_PortalTransferComponent : ScriptComponent
 			// the solid terrain. Source and destination both remain UP.
 			float fallSpeed;
 			bool isReallyDescending = portal.IsCharacterDescending(character, fallSpeed);
-			float rearmDepth = Math.Clamp(portal.GetFloorFallCatchHeight() - 0.20, 0.95, 2.70);
+			// The old depth cap was 2.70 m, so Orange caught the
+			// player ~2.6m ABOVE the oval. Match the normal portal
+			// face trigger (1m) instead. Leave 0.35m clearance so
+			// the native road collider cannot cancel the fall first.
+			float rearmDepth = 1.10;
 			bool nearFallingEntry = exitDepth >= 0.35 && exitDepth <= rearmDepth;
 
 			if (elapsed >= 620 && nearFallingEntry && isReallyDescending)
@@ -92,7 +98,7 @@ class CGS_PortalTransferComponent : ScriptComponent
 				s_mExitProtectionStarted.Remove(character);
 				s_mFloorLoopExits.Remove(character);
 				if (portal.IsDebugEnabled())
-					PrintFormat("[CGS FLOOR LOOP] Descent rearmed EARLY player=%1 depth=%2 downSpeed=%3 elapsed=%4",
+					PrintFormat("[CGS FLOOR LOOP] Descent rearmed NEAR SURFACE player=%1 depth=%2 downSpeed=%3 elapsed=%4",
 						character, exitDepth, fallSpeed, elapsed);
 				return false;
 			}
