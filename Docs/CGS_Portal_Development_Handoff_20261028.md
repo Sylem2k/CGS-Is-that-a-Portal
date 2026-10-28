@@ -79,6 +79,43 @@ destroying it may legitimately stop a PIP pass. If screens still
 flicker while camera slots stay fixed, investigate HDR matching,
 layout/material reset, and 12 FPS capture separately.
 
+## Critical crash regression — PR #70 rolled back (2026-10-28)
+
+After merging PR #70 (read-only-looking native camera-flight probe),
+I encountered a native Reforger access violation while trying to use
+portals:
+
+```text
+Exception: Access violation. Illegal read by 0x7ffbd8dce579 at 0xffffffffffffffff
+```
+
+The address `0xffffffffffffffff` is an invalid pointer. This is NOT
+an Enfusion script compiler error. It may be an invalid camera object
+or lifecycle race, but the exception text alone does NOT identify the
+faulting function and a native crash dump/call stack is still needed.
+
+**Immediate containment:** hotfix
+`hotfix/rollback-unsafe-camera-flight-probe-20261028` restores all
+five runtime scripts/prefabs changed in PR #70 to the exact PR #68
+merge baseline `5dc770705b110d0ef6482e76aff92ff02f26b1fa`.
+All PR #70 calls to `CameraManager.CurrentCamera()`,
+`BaseWorld.GetCurrentCamera()`, and `GetCameraIndex()` during
+floor flight are removed. The prototype notes are kept for forensics
+but clearly marked **DO NOT RUN**.
+
+Do not re-enable PR #70 or build another camera callback until the
+native stack is reviewed. If game no longer crashes after restoring
+PR #68 baseline, that strongly implicates the newly introduced
+probe. If it still crashes, inspect the existing PIP camera renderer
+or other native camera ownership/lifetime code, and capture
+`crash.log`, `error.log`, `script.log`, latest Workbench log and
+crash dump/call stack. Distinguish a game crash from a full Windows
+BSOD/reboot (which would also require driver/OS investigation).
+
+Maintain original input, F/V cube travel, Blue/Orange pairing, 40ms
+adaptive flight, near-surface FALL_ZONE, the PIP stable-slot fix
+from PR #67 and multiplayer postponement.
+
 ## New work in progress — adaptive flight test and floor-aperture idea
 
 - **PR #67 is merged.** Its stable Blue/Orange PIP camera slots are in `main`; I still need an independent Workbench log proving the visible screen flicker is gone.

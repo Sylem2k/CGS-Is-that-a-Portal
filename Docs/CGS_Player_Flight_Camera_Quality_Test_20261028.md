@@ -1,5 +1,23 @@
 # Player flight camera quality — Workbench probe (2026-10-28)
 
+> **DO NOT RUN: Native access violation reported after PR #70.** This
+> read-only-looking camera diagnostic is **disabled/fully rolled back**
+> in hotfix `hotfix/rollback-unsafe-camera-flight-probe-20261028`.
+> It used `CameraManager.CurrentCamera()`,
+> `BaseWorld.GetCurrentCamera()` and `GetCameraIndex()` from the
+> server/offline floor-flight update. Those native camera operations
+> are a plausible cause of the reported illegal read at
+> `0xffffffffffffffff`, but a crash dump is required to prove which
+> function faulted. **Do not re-enable the probe or reapply PR #70.**
+> All player movement, valid portal returns and native cube physics
+> should remain on their previously verified PR #68 baseline.
+>
+> If the crash still reproduces after this rollback, investigate the
+> separate PIP/live camera renderer and collect the full crash
+> stack first, rather than modifying working portal flight on guesswork.
+
+
+
 **Status: source-reviewed, NOT Workbench-compiled or played. This PR measures camera motion only; it does NOT smooth player movement.**
 
 ## Why I am running this test
