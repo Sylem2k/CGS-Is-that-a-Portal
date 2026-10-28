@@ -13,6 +13,7 @@ GenericEntity {
    m_fBreakDistance 12
    m_fPullResponse 8
    m_fMaxHoldSpeed 15
+   m_fThrowSpeed 15
    m_bDebug 1
   }
   CGS_PortalGunComponent "{6AB21D161F2E7461}" {

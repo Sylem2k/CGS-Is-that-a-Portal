@@ -8,6 +8,7 @@ modded class SCR_PlayerController
 
 	// Phase 1 physics grab; isolated from both Blue/Orange firing actions.
 	protected bool m_bCGSGrabKeyHeld;
+	protected bool m_bCGSThrowKeyHeld;
 	protected int m_iCGSLastGrabAimMs;
 	// Server-side only: remember the exact gun used for this grab so
 	// a release still works after the player changes their active weapon.
@@ -35,6 +36,7 @@ modded class SCR_PlayerController
 		CGS_PinkGunComponent equippedPinkGun = CGS_GetEquippedPinkGun();
 		if (equippedPinkGun)
 		{
+			m_bCGSThrowKeyHeld = false;
 			if (m_bCGSGrabKeyHeld)
 			{
 				CGS_RequestGrabRelease();
@@ -63,6 +65,7 @@ modded class SCR_PlayerController
 		CGS_PortalGunComponent equippedGun = CGS_GetEquippedPortalGun();
 		if (!equippedGun || GetGame().GetMenuManager().IsAnyMenuOpen())
 		{
+			m_bCGSThrowKeyHeld = false;
 			if (m_bCGSGrabKeyHeld)
 			{
 				CGS_RequestGrabRelease();
@@ -81,16 +84,20 @@ modded class SCR_PlayerController
 		{
 			bool actionFound;
 			bool grabActionFound;
+			bool throwActionFound;
 			for (int i = 0; i < inputManager.GetActionCount(); i++)
 			{
 				if (inputManager.GetActionName(i) == "CGSPortalGunOrange")
 					actionFound = true;
 				if (inputManager.GetActionName(i) == "CGSPortalGunGrab")
 					grabActionFound = true;
+				if (inputManager.GetActionName(i) == "CGSPortalGunThrow")
+					throwActionFound = true;
 			}
 
 			PrintFormat("[CGS GUN INPUT] Orange action registered=%1 contextActivated=%2", actionFound, activated);
-			PrintFormat("[CGS GRAB INPUT] J action registered=%1 contextActivated=%2", grabActionFound, activated);
+			PrintFormat("[CGS GRAB INPUT] F action registered=%1 contextActivated=%2", grabActionFound, activated);
+			PrintFormat("[CGS GRAB THROW INPUT] V action registered=%1 contextActivated=%2", throwActionFound, activated);
 			m_bCGSInputContextReported = true;
 		}
 
@@ -102,9 +109,18 @@ modded class SCR_PlayerController
 		m_bCGSWasPrimaryHeld = primaryHeld;
 		m_bCGSWasSecondaryHeld = secondaryHeld;
 
-		// HOLD J = pull/hold, RELEASE J = drop. This action has no
-		// InputFilterPressed; GetActionValue remains active while held.
+		// HOLD F = pull/hold, RELEASE F = drop. V throws the held prop.
+		// Neither action uses InputFilterPressed: F remains held and V
+		// is turned into a single press with an edge detector.
 		bool grabHeld = inputManager.GetActionValue("CGSPortalGunGrab") > 0.5;
+		bool throwHeld = inputManager.GetActionValue("CGSPortalGunThrow") > 0.5;
+		bool throwPressed = throwHeld && !m_bCGSThrowKeyHeld;
+		m_bCGSThrowKeyHeld = throwHeld;
+
+		// Throwing requires F to have been held on a PRIOR frame.
+		// This avoids throwing before the reliable grab-start RPC has
+		// a chance to acquire the prop when F and V are hit together.
+		bool throwWithHeldF = throwPressed && grabHeld && m_bCGSGrabKeyHeld;
 		if (grabHeld)
 		{
 			int nowMs = GetGame().GetWorld().GetWorldTime();
@@ -114,7 +130,7 @@ modded class SCR_PlayerController
 				GetGame().GetWorld().GetCurrentCamera(grabCamera);
 				if (!m_bCGSGrabKeyHeld)
 				{
-					PrintFormat("[CGS GRAB INPUT] J pressed player=%1", GetPlayerId());
+					PrintFormat("[CGS GRAB INPUT] F pressed player=%1", GetPlayerId());
 					CGS_RequestGrabStart(grabCamera[3], grabCamera[2]);
 				}
 				else
@@ -124,10 +140,18 @@ modded class SCR_PlayerController
 		}
 		else if (m_bCGSGrabKeyHeld)
 		{
-			PrintFormat("[CGS GRAB INPUT] J released player=%1", GetPlayerId());
+			PrintFormat("[CGS GRAB INPUT] F released player=%1", GetPlayerId());
 			CGS_RequestGrabRelease();
 		}
 		m_bCGSGrabKeyHeld = grabHeld;
+
+		if (throwWithHeldF)
+		{
+			vector throwCamera[4];
+			GetGame().GetWorld().GetCurrentCamera(throwCamera);
+			PrintFormat("[CGS GRAB THROW INPUT] V pressed player=%1", GetPlayerId());
+			CGS_RequestGrabThrow(throwCamera[3], throwCamera[2]);
+		}
 
 		if (!primaryPressed && !secondaryPressed)
 			return;
@@ -394,6 +418,32 @@ modded class SCR_PlayerController
 
 		m_pCGSServerGrabGun.ServerReleaseGrab(GetPlayerId());
 		m_pCGSServerGrabGun = null;
+	}
+
+	// V throws the currently held prop. Only the server knows which
+	// entity is held and checks that the Portal Gun is still equipped.
+	protected void CGS_RequestGrabThrow(vector cameraOrigin, vector cameraForward)
+	{
+		if (Replication.IsServer())
+			RpcAsk_CGSGrabThrow(cameraOrigin, cameraForward);
+		else
+			Rpc(RpcAsk_CGSGrabThrow, cameraOrigin, cameraForward);
+	}
+
+	[RplRpc(RplChannel.Reliable, RplRcver.Server)]
+	protected void RpcAsk_CGSGrabThrow(vector cameraOrigin, vector cameraForward)
+	{
+		if (!Replication.IsServer())
+			return;
+
+		if (!m_pCGSServerGrabGun)
+		{
+			PrintFormat("[CGS GRAB THROW REJECT] player=%1 has no held prop", GetPlayerId());
+			return;
+		}
+
+		if (m_pCGSServerGrabGun.ServerThrowGrab(this, cameraOrigin, cameraForward))
+			m_pCGSServerGrabGun = null;
 	}
 
 	// PORTAL MP: Reforger characters are client-predicted.

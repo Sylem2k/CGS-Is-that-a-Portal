@@ -2,7 +2,7 @@
 // This component belongs on the GUN. It only operates on objects that
 // contain CGS_GrabbableComponent on their root and have dynamic physics.
 // All target selection, ownership and physical movement are server-owned.
-[ComponentEditorProps(category: "CGS Portal", description: "Server-authoritative J-key grab and physical hold for opt-in props.")]
+[ComponentEditorProps(category: "CGS Portal", description: "Server-authoritative F grab / V throw for opt-in dynamic props.")]
 class CGS_GrabGunComponentClass : ScriptComponentClass
 {
 }
@@ -21,7 +21,10 @@ class CGS_GrabGunComponent : ScriptComponent
 	[Attribute("15", UIWidgets.EditBox, "Maximum physical hold speed (meters per second)")]
 	protected float m_fMaxHoldSpeed;
 
-	[Attribute("1", UIWidgets.CheckBox, "Log grab/release events")]
+	[Attribute("15", UIWidgets.EditBox, "Speed in meters per second when throwing with V")]
+	protected float m_fThrowSpeed;
+
+	[Attribute("1", UIWidgets.CheckBox, "Log grab/release/throw events")]
 	protected bool m_bDebug;
 
 	protected CGS_GrabbableComponent m_pHeld;
@@ -163,6 +166,53 @@ class CGS_GrabGunComponent : ScriptComponent
 		m_vAimOrigin = cameraOrigin;
 		m_vAimDirection = cameraDirection.Normalized();
 		m_iLastAimUpdateMs = GetGame().GetWorld().GetWorldTime();
+	}
+
+	// The player must still hold the original, server-approved object
+	// and have this same Portal Gun EQUIPPED to throw. The target is
+	// NEVER supplied by the client. V only applies to an active hold.
+	bool ServerThrowGrab(SCR_PlayerController requester, vector cameraOrigin, vector cameraDirection)
+	{
+		if (!Replication.IsServer() || !m_pHeld || !requester)
+			return false;
+
+		int playerId = requester.GetPlayerId();
+		if (playerId != m_iHolderPlayerId)
+			return false;
+
+		if (!ValidatePlayerAndAim(requester, cameraOrigin, cameraDirection))
+		{
+			if (m_bDebug)
+				PrintFormat("[CGS GRAB THROW REJECT] player=%1 gun not equipped or aim invalid", playerId);
+			ServerReleaseGrab(playerId);
+			return false;
+		}
+
+		IEntity prop = m_pHeld.GetOwner();
+		if (!prop || prop.IsDeleted() || !m_pHeld.ServerIsHeldBy(playerId))
+		{
+			ServerReleaseGrab(playerId);
+			return false;
+		}
+
+		// Use the same dynamic-body check as regular grab. If physics
+		// disappears, release safely instead of launching a static prop.
+		if (!CGS_GrabService.ApplyThrowVelocity(prop, cameraDirection, m_fThrowSpeed))
+		{
+			if (m_bDebug)
+				PrintFormat("[CGS GRAB THROW REJECT] player=%1 prop=%2 dynamic physics unavailable", playerId, prop);
+			ServerReleaseGrab(playerId);
+			return false;
+		}
+
+		m_pHeld.ServerRelease(playerId);
+		m_pHeld = null;
+		m_iHolderPlayerId = -1;
+
+		if (m_bDebug)
+			PrintFormat("[CGS GRAB THROW] player=%1 prop=%2 velocity=%3",
+				playerId, prop, prop.GetPhysics().GetVelocity());
+		return true;
 	}
 
 	void ServerReleaseGrab(int playerId)

@@ -29,4 +29,21 @@ class CGS_GrabService
 		physics.SetVelocity(appliedVelocity);
 		return true;
 	}
+
+	// One-shot launch: the server imparts velocity to an already-moving,
+	// replicated dynamic rigidbody, then the object resumes normal
+	// collision/gravity simulation. No teleport or character velocity.
+	static bool ApplyThrowVelocity(IEntity entity, vector forward, float speed)
+	{
+		if (!Replication.IsServer() || !entity || entity.IsDeleted())
+			return false;
+
+		Physics physics = entity.GetPhysics();
+		if (!physics || !physics.IsDynamic() || forward.LengthSq() < 0.25)
+			return false;
+
+		float clampedSpeed = Math.Clamp(speed, 1.0, 35.0);
+		physics.SetVelocity(forward.Normalized() * clampedSpeed);
+		return true;
+	}
 }
