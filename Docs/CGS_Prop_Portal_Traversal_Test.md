@@ -103,6 +103,48 @@ each portal's center, and look for `[CGS PORTAL PROP CANDIDATE]`,
 but no successful transfer, send those lines, including the blocker.
 Stand well clear of the destination opening.
 
+## Oct 28 follow-up: confirmed silent teleport type mismatch
+
+The latest Workbench log `Pasted text(20261028-053221).txt` **finally reaches the transfer function**:
+
+- Cube script tick confirms enabled: `[CGS PORTAL PROP TICK] ... travelEnabled=1`.
+- Hold F, V throw succeeds at 15m/s.
+- `registeredPortals=2` confirms both portals exist.
+- Dozens of `[CGS PORTAL PROP CANDIDATE] source=1 exit=0` and `source=0 exit=1` messages, at depths 1.7m to -0.1m, including `predicted=1` and `contact=1`.
+- **Zero successful `[CGS PORTAL PROP]` and zero `[CGS PORTAL PROP BLOCKED]` events** in the entire log.
+
+### Actual code defect
+
+The previous implementation passes all entry and unobstructed-exit checks, but
+calls `BaseGameEntity.Cast(prop)` before the move. The cube is explicitly
+instantiated as **`GenericEntity`** (`Not_Companion_Cube.et`), so this is
+an incompatible cast that silently returns `false`. No movement occurs.
+
+### Corrective fix
+
+- Use `GenericEntity.Cast(prop)` and `genericProp.SetOrigin(exitPosition)`
+  on the actual existing cube, preserving its orientation.
+- Verify the real resulting server origin is within 0.5m of the requested
+  exit **before** applying ordinary rigidbody outgoing velocity.
+- On failure print `[CGS PORTAL PROP ERROR]` with requested/actual
+  positions rather than silently dropping a confirmed crossing.
+- On success print `[CGS PORTAL PROP]` only after movement is confirmed.
+- Rate limit `CANDIDATE` logs because the grabbable and gun watcher both
+  invoke the same transfer check.
+
+### Exact retest
+
+1. Reload Workbench, compile scripts, place paired Blue/Orange on slopes as before.
+2. Hold F to grab existing cube, press V while holding F, stand clear of exit.
+3. Expect **ONE** `[CGS PORTAL PROP]` per successful crossing and see the
+   **same cube** appear in front of the other portal.
+4. If `[CGS PORTAL PROP ERROR]`, paste the line; its actual/requested
+   position reveals if Enfusion physics overrides `SetOrigin`.
+5. After offline success, test **two-client dedicated multiplayer**, because
+   initial server position correctness does not guarantee rigidbody network
+   movement/replication correctness.
+6. Players' momentum-free teleport, F/V controls, and cube GUID/model are unchanged.
+
 ## Debug messages
 
 - `[CGS GRAB THROW]` — server launched the held cube with native rigidbody physics.
