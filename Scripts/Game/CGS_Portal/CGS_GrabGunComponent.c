@@ -182,6 +182,8 @@ class CGS_GrabGunComponent : ScriptComponent
 
 		if (!ValidatePlayerAndAim(requester, cameraOrigin, cameraDirection))
 		{
+			if (m_bDebug)
+				PrintFormat("[CGS GRAB THROW REJECT] player=%1 gun not equipped or aim invalid", playerId);
 			ServerReleaseGrab(playerId);
 			return false;
 		}
@@ -197,6 +199,8 @@ class CGS_GrabGunComponent : ScriptComponent
 		// disappears, release safely instead of launching a static prop.
 		if (!CGS_GrabService.ApplyThrowVelocity(prop, cameraDirection, m_fThrowSpeed))
 		{
+			if (m_bDebug)
+				PrintFormat("[CGS GRAB THROW REJECT] player=%1 prop=%2 dynamic physics unavailable", playerId, prop);
 			ServerReleaseGrab(playerId);
 			return false;
 		}
