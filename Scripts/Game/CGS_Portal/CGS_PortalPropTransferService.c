@@ -163,25 +163,78 @@ class CGS_PortalPropTransferService
 		vector exitBase = destination.GetOwner().GetOrigin();
 		vector exitPosition = exitBase + exitNormal * exitDistance;
 
-		// Check a short ray on the OUTGOING side. Never spawn a dynamic
-		// prop through a solid obstacle or into a blocked exit tunnel.
-		TraceParam trace = new TraceParam();
-		trace.Start = exitBase + exitNormal * 0.45;
-		trace.End = exitPosition;
-		trace.Flags = TraceFlags.WORLD | TraceFlags.ENTS;
-		ref array<IEntity> excluded = {};
-		excluded.Insert(prop);
-		excluded.Insert(source.GetOwner());
-		excluded.Insert(destination.GetOwner());
-		trace.ExcludeArray = excluded;
+		// The player's body may temporarily occupy the center of an
+		// otherwise valid destination. Try a SMALL in-opening sideways
+		// offset ONLY when a player blocks the central exit ray.
+		// Never ignore the player or teleport a cube into their body.
+		float rightOffset = Math.Min(destination.GetPortalHalfWidth() - 0.32, 1.15);
+		float upOffset = Math.Min(destination.GetPortalHalfHeight() - 0.32, 1.15);
+		vector offsets[5];
+		offsets[0] = vector.Zero;
+		offsets[1] = exitRight * rightOffset;
+		offsets[2] = -exitRight * rightOffset;
+		offsets[3] = exitUp * upOffset;
+		offsets[4] = -exitUp * upOffset;
 
-		float fraction = GetGame().GetWorld().TraceMove(trace, null);
-		if (fraction < 0.999)
+		bool exitClear = false;
+		bool tryPlayerOffset = false;
+		IEntity firstBlocker;
+		int chosenOffset = 0;
+		for (int i = 0; i < 5; i++)
+		{
+			if (i > 0 && !tryPlayerOffset)
+				break;
+
+			// Do not attempt candidates outside a narrow portal opening.
+			if (i == 1 || i == 2)
+			{
+				if (rightOffset < 0.45)
+					continue;
+			}
+			if (i == 3 || i == 4)
+			{
+				if (upOffset < 0.45)
+					continue;
+			}
+
+			vector lateral = offsets[i];
+			TraceParam trace = new TraceParam();
+			trace.Start = exitBase + lateral + exitNormal * 0.45;
+			trace.End = exitBase + lateral + exitNormal * exitDistance;
+			trace.Flags = TraceFlags.WORLD | TraceFlags.ENTS;
+			ref array<IEntity> excluded = {};
+			excluded.Insert(prop);
+			excluded.Insert(source.GetOwner());
+			excluded.Insert(destination.GetOwner());
+			trace.ExcludeArray = excluded;
+
+			float fraction = GetGame().GetWorld().TraceMove(trace, null);
+			if (fraction >= 0.999)
+			{
+				exitPosition = trace.End;
+				chosenOffset = i;
+				exitClear = true;
+				break;
+			}
+
+			if (i == 0)
+			{
+				firstBlocker = trace.TraceEnt;
+				tryPlayerOffset = ChimeraCharacter.Cast(firstBlocker) != null;
+			}
+		}
+
+		if (!exitClear)
 		{
 			if ((source.IsDebugEnabled() || destination.IsDebugEnabled()) && grabbable.ShouldLogPortalBlocked(nowMs))
-				PrintFormat("[CGS PORTAL PROP BLOCKED] source=%1 exit=%2 blocker=%3", source.GetPortalID(), destination.GetPortalID(), trace.TraceEnt);
+				PrintFormat("[CGS PORTAL PROP BLOCKED] source=%1 exit=%2 blocker=%3 (move player/obstacle away from exit)",
+					source.GetPortalID(), destination.GetPortalID(), firstBlocker);
 			return false;
 		}
+
+		if (chosenOffset > 0 && (source.IsDebugEnabled() || destination.IsDebugEnabled()))
+			PrintFormat("[CGS PORTAL PROP OFFSET] exitColor=%1 lane=%2 position=%3 (center blocked by character)",
+				destination.GetPortalID(), chosenOffset, exitPosition);
 
 		BaseGameEntity gameProp = BaseGameEntity.Cast(prop);
 		if (!gameProp)
