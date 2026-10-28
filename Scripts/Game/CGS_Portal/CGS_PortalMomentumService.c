@@ -37,6 +37,9 @@ class CGS_PortalMomentumState : Managed
 	int m_iFloorArrivalTimeoutMs;
 	int m_iFloorArrivalSamples;
 	int m_iFloorLiftDurationMs;
+	float m_fFloorInitialUpwardSpeed;
+	float m_fFloorHighestObservedY;
+	int m_iFloorStalledFrames;
 }
 
 //------------------------------------------------------------------------------------------------
@@ -126,6 +129,9 @@ class CGS_PortalMomentumService
 			state.m_vLoopStart = expectedExit;
 			state.m_iFloorArrivalSamples = 0;
 			state.m_iFloorLiftDurationMs = Math.Round(safeTime * 1000);
+			state.m_fFloorInitialUpwardSpeed = safeSpeed;
+			state.m_fFloorHighestObservedY = expectedExit[1];
+			state.m_iFloorStalledFrames = 0;
 			state.m_iFloorArrivalTimeoutMs = state.m_iArmedAtMs + 650;
 			// The flight timeout starts AFTER the character actually
 			// arrives. Until then only wait for the safe teleport to
@@ -308,6 +314,7 @@ class CGS_PortalMomentumService
 				state.m_iLastTickMs = now;
 				state.m_iArmedAtMs = now;
 				state.m_iExpireMs = now + state.m_iFloorLiftDurationMs;
+				state.m_fFloorHighestObservedY = state.m_vLoopStart[1];
 				if (state.m_bDebug)
 					PrintFormat("[CGS FLOOR LOOP] Start AFTER ARRIVAL character=%1 origin=%2 expected=%3 upward=%4",
 						character, state.m_vLoopStart, state.m_vExpectedFloorExit, state.m_vVirtualVelocity[1]);
@@ -336,22 +343,41 @@ class CGS_PortalMomentumService
 
 			if (state.m_bSafeFloorLoop)
 			{
-				// Release control once upward energy is exhausted.
-				// Native character gravity then handles the descent.
-				if (desired[1] <= 0)
+				// The old version added only a tiny relative delta by
+				// BaseGameEntity.Teleport(). The local character controller
+				// reset that correction the next simulation frame. In the
+				// actual log the requested launch was 4.5m/s but the
+				// character was at or BELOW its exit 350ms later.
+				//
+				// Instead use a single deterministic vertical flight
+				// trajectory anchored AFTER the engine teleport settles:
+				// h(t) = h0 + v0*t - 0.5*g*t*t.
+				// Apply an ABSOLUTE position correction via the same
+				// IEntity.SetWorldTransform that the teleport service
+				// already supports. This is OFFLINE only.
+				vector currentOrigin = character.GetOrigin();
+				state.m_fFloorHighestObservedY = Math.Max(state.m_fFloorHighestObservedY, currentOrigin[1]);
+
+				int flightAgeMs = now - state.m_iArmedAtMs;
+				float flightSeconds = Math.Max(0.0, flightAgeMs * 0.001);
+				float speedNow = state.m_fFloorInitialUpwardSpeed - state.m_fGravity * flightSeconds;
+				float plannedY = state.m_vLoopStart[1] + state.m_fFloorInitialUpwardSpeed * flightSeconds -
+					0.5 * state.m_fGravity * flightSeconds * flightSeconds;
+
+				if (speedNow <= 0)
 				{
 					if (state.m_bDebug)
-						PrintFormat("[CGS FLOOR LOOP] Apex: stop lift and return to native gravity. ticks=%1", state.m_iTicks);
+						PrintFormat("[CGS FLOOR LOOP] Apex: ticks=%1 startY=%2 peakObservedY=%3 expectedApexY=%4",
+							state.m_iTicks, state.m_vLoopStart[1], state.m_fFloorHighestObservedY,
+							state.m_vLoopStart[1] + 0.5 * state.m_fFloorInitialUpwardSpeed *
+							state.m_fFloorInitialUpwardSpeed / state.m_fGravity);
 					s_aActive.RemoveOrdered(i);
 					continue;
 				}
 
-				vector floorOrigin = character.GetOrigin();
-				vector fromStart = floorOrigin - state.m_vLoopStart;
-				fromStart[1] = 0;
-
-				// Walking sideways is a deliberate way to EXIT the loop.
-				if (fromStart.LengthSq() > 9.0)
+				vector driftFromStart = currentOrigin - state.m_vLoopStart;
+				driftFromStart[1] = 0;
+				if (driftFromStart.LengthSq() > 9.0)
 				{
 					if (state.m_bDebug)
 						Print("[CGS FLOOR LOOP] Cancel: player moved away from exit.");
@@ -359,19 +385,24 @@ class CGS_PortalMomentumService
 					continue;
 				}
 
-				float nativeUp = controller.GetVelocity()[1];
-				float liftStep = (desired[1] - nativeUp) * dt;
-				if (liftStep <= 0.003)
+				// Ground/controller correction is typically downward.
+				// Fight only the lost UPWARD travel; never force a
+				// downward teleport or fight horizontal player input.
+				float neededRise = plannedY - currentOrigin[1];
+				if (neededRise <= 0.004)
 					continue;
 
-				// Hard limit: never move the player sideways or force
-				// high-speed multi-meter jumps as old momentum did.
-				liftStep = Math.Min(liftStep, 0.16);
-				vector nextOrigin = floorOrigin + Vector(0, liftStep, 0);
+				// Allow a limited catch-up if the native controller
+				// changed our position between frames. This is not
+				// the legacy all-axis momentum correction.
+				float riseStep = Math.Min(neededRise, 0.28);
+				vector targetOrigin = currentOrigin + Vector(0, riseStep, 0);
 
+				// An upward-only torso sweep protects the player from
+				// ceilings, static geometry, and other entities.
 				TraceSphere safeSweep = new TraceSphere();
-				safeSweep.Start = floorOrigin + Vector(0, 0.95, 0);
-				safeSweep.End = nextOrigin + Vector(0, 0.95, 0);
+				safeSweep.Start = currentOrigin + Vector(0, 0.95, 0);
+				safeSweep.End = targetOrigin + Vector(0, 0.95, 0);
 				safeSweep.Radius = 0.30;
 				safeSweep.Exclude = character;
 				safeSweep.Flags = TraceFlags.WORLD | TraceFlags.ENTS;
@@ -384,20 +415,36 @@ class CGS_PortalMomentumService
 					continue;
 				}
 
-				BaseGameEntity playerEntity = BaseGameEntity.Cast(character);
-				if (!playerEntity)
+				vector nextMatrix[4];
+				character.GetWorldTransform(nextMatrix);
+				nextMatrix[3] = targetOrigin;
+
+				// CharacterController-owned actors may not honor
+				// BaseGameEntity.Teleport as an instantaneous per-frame
+				// correction. Transform the actual locally simulated
+				// character instead; check the resulting position.
+				character.SetWorldTransform(nextMatrix);
+				float afterY = character.GetOrigin()[1];
+				state.m_iTicks++;
+
+				if (afterY < currentOrigin[1] + riseStep * 0.25)
+					state.m_iFloorStalledFrames++;
+				else
+					state.m_iFloorStalledFrames = 0;
+
+				if (state.m_bDebug && (state.m_iTicks == 1 || state.m_iTicks % 8 == 0))
+					PrintFormat("[CGS FLOOR FLIGHT] tick=%1 t=%2 plannedY=%3 beforeY=%4 afterY=%5 step=%6",
+						state.m_iTicks, flightSeconds, plannedY, currentOrigin[1], afterY, riseStep);
+
+				// Stop if even the direct transform is refused. A
+				// failure is diagnosed, not hidden by an Apex log.
+				if (state.m_iFloorStalledFrames >= 4)
 				{
 					if (state.m_bDebug)
-						Print("[CGS FLOOR LOOP] Cancel: player not a BaseGameEntity.");
+						PrintFormat("[CGS FLOOR LOOP] Cancel: character transform refused movement. current=%1 expectedY=%2",
+							character.GetOrigin(), plannedY);
 					s_aActive.RemoveOrdered(i);
-					continue;
 				}
-
-				vector floorMatrix[4];
-				character.GetWorldTransform(floorMatrix);
-				floorMatrix[3] = nextOrigin;
-				playerEntity.Teleport(floorMatrix);
-				state.m_iTicks++;
 				continue;
 			}
 
