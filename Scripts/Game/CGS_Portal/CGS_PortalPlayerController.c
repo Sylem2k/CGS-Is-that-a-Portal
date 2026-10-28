@@ -80,16 +80,17 @@ modded class SCR_PlayerController
 		if (!m_bCGSInputContextReported)
 		{
 			bool actionFound;
+			bool grabActionFound;
 			for (int i = 0; i < inputManager.GetActionCount(); i++)
 			{
 				if (inputManager.GetActionName(i) == "CGSPortalGunOrange")
-				{
 					actionFound = true;
-					break;
-				}
+				if (inputManager.GetActionName(i) == "CGSPortalGunGrab")
+					grabActionFound = true;
 			}
 
 			PrintFormat("[CGS GUN INPUT] Orange action registered=%1 contextActivated=%2", actionFound, activated);
+			PrintFormat("[CGS GRAB INPUT] J action registered=%1 contextActivated=%2", grabActionFound, activated);
 			m_bCGSInputContextReported = true;
 		}
 
@@ -101,7 +102,7 @@ modded class SCR_PlayerController
 		m_bCGSWasPrimaryHeld = primaryHeld;
 		m_bCGSWasSecondaryHeld = secondaryHeld;
 
-		// HOLD G = pull/hold, RELEASE G = drop. This action has no
+		// HOLD J = pull/hold, RELEASE J = drop. This action has no
 		// InputFilterPressed; GetActionValue remains active while held.
 		bool grabHeld = inputManager.GetActionValue("CGSPortalGunGrab") > 0.5;
 		if (grabHeld)
@@ -112,7 +113,10 @@ modded class SCR_PlayerController
 				vector grabCamera[4];
 				GetGame().GetWorld().GetCurrentCamera(grabCamera);
 				if (!m_bCGSGrabKeyHeld)
+				{
+					PrintFormat("[CGS GRAB INPUT] J pressed player=%1", GetPlayerId());
 					CGS_RequestGrabStart(grabCamera[3], grabCamera[2]);
+				}
 				else
 					CGS_RequestGrabAim(grabCamera[3], grabCamera[2]);
 				m_iCGSLastGrabAimMs = nowMs;
@@ -120,6 +124,7 @@ modded class SCR_PlayerController
 		}
 		else if (m_bCGSGrabKeyHeld)
 		{
+			PrintFormat("[CGS GRAB INPUT] J released player=%1", GetPlayerId());
 			CGS_RequestGrabRelease();
 		}
 		m_bCGSGrabKeyHeld = grabHeld;
@@ -346,7 +351,10 @@ modded class SCR_PlayerController
 
 		CGS_GrabGunComponent gun = CGS_GetEquippedGrabGun();
 		if (!gun)
+		{
+			PrintFormat("[CGS GRAB REJECT] Missing grab component on equipped Portal Gun. player=%1", GetPlayerId());
 			return;
+		}
 
 		if (gun.ServerStartGrab(this, cameraOrigin, cameraForward))
 			m_pCGSServerGrabGun = gun;
