@@ -17,6 +17,23 @@
 ## Workbench test
 
 1. Pull branch, rescan files, compile Game scripts. Spawn `Prefabs/Props/Core/Not_Companion_Cube.et`; verify the original resource GUID `{E4CC81B24CC91AB3}` remains intact.
+
+### Reproduction from the Oct 28 Workbench log
+
+- The user's test was **offline**, one player, with **both portals on the ROAD facing UP**, not wall portals. The cube was correctly grabbed with F many times but no `[CGS GRAB THROW INPUT] V pressed` or `[CGS GRAB THROW]` appeared anywhere in that log. **Holding F then releasing it only drops the cube**; to launch it, keep holding F and tap V.
+- `[CGS PORTAL PROP BLOCKED] source=1 exit=0 blocker=SCR_ChimeraCharacter` proves the prop transfer detector was reached, but the requested destination was occupied by the player.
+- This fix accepts **sideways rolling/sliding across the footprint of an upward-facing FLOOR portal** as well as physical inward/downward crossing, provided the cube was **previously outside** and has nonzero travel speed. It doesn't teleport stationary objects just because they are near a portal.
+- If a character occupies the center exit lane, the server now checks **four off-center lanes inside the actual opening**. It still rejects all obstructed lanes, rather than phasing through the player or map geometry.
+- For a rolling floor entry, the cube exits along the destination's outward normal with a small minimum physical speed (3.5 m/s, capped by the cube's current 25m/s maximum). Players retain normal momentum-free teleportation.
+
+### Focused test of the user's actual setup
+
+1. Create **Blue UP on road, Orange UP on another stretch of road** at least 6m apart. Stand to the side, *not above the other portal*.
+2. Hold **F** to pull the existing cube. While still holding F, aim across the floor and tap **V** so the cube moves **into the footprint** of Blue. (F release alone is only a drop.)
+3. Check `[CGS GRAB THROW INPUT] V pressed`, `[CGS GRAB THROW]` and `[CGS PORTAL PROP] ... floorSlide=1`. Cube should reappear above Orange and move out/up without a player-yeet effect.
+4. Reverse Blue/Orange. After floor-to-floor works, test wall-to-wall and floor-to-wall.
+5. If `[CGS PORTAL PROP BLOCKED]` persists, clear the destination (including other players and props) and try again.
+
 2. Equip the Portal Gun and create **Blue on a wall, Orange on a separate wall** with a clear open area in front of each. For the first test use walls > 5m apart and leave 3m of free space at the exit.
 3. Look at the cube, **hold F** to grab and pull it toward the gun.
 4. Aim into the **center** of Blue and **tap V while continuing to hold F**. The cube must be thrown at Blue and appear in front of Orange, moving out of the Orange opening.
@@ -40,4 +57,5 @@
 - Exit clearance is currently checked by a **ray**, not a full cube-shaped sweep; real-world collision/overlap safety must be confirmed in Workbench.
 - Momentum *for players* remains disabled. Props use ordinary rigidbody throw speed without acceleration.
 - A cube that remains inside its exit capture zone cannot immediately re-enter that same portal; move it away and approach again.
+- Exit alternate lanes use line traces, not a full rigidbody collision hull sweep. Test the cube near players and portal edges; do not merge until clipping is ruled out.
 - The test may expose engine/physics replication constraints. Treat log results and actual client visuals as the authority.
