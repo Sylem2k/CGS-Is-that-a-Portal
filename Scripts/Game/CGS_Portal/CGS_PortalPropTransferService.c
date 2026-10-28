@@ -28,7 +28,11 @@ class CGS_PortalPropTransferService
 		if (velocity.LengthSq() < 0.25 && elapsedMs > 0 && elapsedMs <= 250)
 			velocity = displacement * (1000.0 / elapsedMs);
 
-		if (velocity.LengthSq() < 0.36)
+		// On solid terrain the inward velocity is often exactly zero
+		// by the first frame that the cube is inside the opening.
+		// Allow only a RECENT and independently validated approach
+		// to complete in that case; unarmed idle props still return.
+		if (velocity.LengthSq() < 0.36 && !grabbable.ServerHasRecentPortalApproach(nowMs))
 			return false;
 
 		ref array<CGS_PortalComponent> portals = {};
