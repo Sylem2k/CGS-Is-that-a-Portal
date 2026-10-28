@@ -106,6 +106,24 @@ class CGS_PortalMomentumService
 		return false;
 	}
 
+	// The short offline lift must finish before an exit can accept
+	// the same player on the way back DOWN. Ascent pulses contain
+	// tiny native downward frames, so controller.IsFalling() alone
+	// must never be used to re-arm during active launch.
+	static bool IsFloorLoopActive(IEntity character)
+	{
+		if (!character)
+			return false;
+
+		foreach (CGS_PortalMomentumState state : s_aActive)
+		{
+			if (state && state.m_bSafeFloorLoop && state.m_Character == character)
+				return true;
+		}
+
+		return false;
+	}
+
 	static void Stop(IEntity character)
 	{
 		for (int i = s_aActive.Count() - 1; i >= 0; i--)

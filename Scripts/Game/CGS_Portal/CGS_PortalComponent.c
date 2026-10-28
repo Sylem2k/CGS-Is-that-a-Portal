@@ -203,6 +203,17 @@ class CGS_PortalComponent : ScriptComponent
 		return Math.Clamp(m_fFloorLoopTimeout, 0.4, 2.0);
 	}
 
+	float GetFloorFallCatchHeight()
+	{
+		// The rescue zone differs by portal prefab: Blue defaults
+		// to 2m, Orange to 3.5m. Stay a little below its upper edge
+		// when re-arming so the falling player can be caught.
+		if (!m_bFallCatchAssist)
+			return Math.Max(1.0, m_fFrontCatchDistance);
+
+		return Math.Max(1.0, m_fFallCatchHeight);
+	}
+
 	int GetPortalOwnerID()
 	{
 		return m_iPortalOwnerID;
@@ -354,6 +365,26 @@ class CGS_PortalComponent : ScriptComponent
 		}
 
 		return hasCurrentSample;
+	}
+
+	// The native CharacterController may report zero Y speed even
+	// during a genuine fall (confirmed by Workbench logs). Reuse the
+	// existing 80+ms observed-position sample instead. This observes
+	// the SAME physical player that FALL_ZONE checks, without adding
+	// another position-sampling state machine in the transfer service.
+	bool IsCharacterDescending(IEntity character, out float downwardSpeed)
+	{
+		downwardSpeed = 0;
+		if (!character || !GetGame() || !GetGame().GetWorld())
+			return false;
+
+		vector observed;
+		int nowMs = GetGame().GetWorld().GetWorldTime();
+		if (!CGS_GetObservedSpeed(character, nowMs, true, observed))
+			return false;
+
+		downwardSpeed = -observed[1];
+		return downwardSpeed > 0.65;
 	}
 
 	// Whether this point is still inside this portal's FULL catch area.
