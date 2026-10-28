@@ -5,12 +5,79 @@
 ## Where my work lives
 
 - **Primary GitHub repository:** https://github.com/Sylem2k/CGS-Is-that-a-Portal
-- **Main branch:** contains all merged PRs through **#65** as of this handoff.
-- **Pending fix branch:** `fix/floor-loop-near-surface-catch-handoff-20261028`
-- **Pending PR:** see branch's newly opened pull request after this handoff is committed.
+- **Main branch:** contains all merged PRs through **#66** as of my 2026-10-28 06:29 Workbench retest.
+- **Current test branch:** `fix/pip-camera-slot-stability-20261028` (stable two-camera PIP slots; follow-up to successful PR #66)
+- **Current draft PR:** #67 (PIP camera slot stabilization; not Workbench-tested as of writing). PR #66 was merged and its new near-surface logic HAS passed a real Workbench test.
 - This Portal Gun is a separate project from my three Arma Reforger MechWarrior repositories; do not confuse or overwrite them.
 - I use Arma Reforger / Enfusion Workbench **1.8.0.13** in the supplied logs, testing the offline `unnamed.ent` scenario.
 - When editing scripts, **preserve original script filenames and resource GUIDs**. I expect complete scripts ready for copy/paste if I need to drag-and-drop files. GitHub commits/PRs are the normal delivery path. Write development notes in **first person**.
+
+## New Workbench verification — 2026-10-28 06:29 (PR #66 success)
+
+I tested PR #66 in Arma Reforger Workbench 1.8.0.13 and supplied
+`Pasted text(20261028-062946).txt`, a 961-line offline log.
+
+**The near-surface return fix is now confirmed working, not just source-reviewed:**
+
+- **11 successful `entry=FALL_ZONE success=1` automatic return transfers.**
+- **11 `[CGS FLOOR LOOP] Descent rearmed NEAR SURFACE`**, depths
+  **0.878–1.012m**, average **0.939m** above each portal face.
+  The old premature 2.6–2.7m return is gone in this test.
+- **11 `Apex` events**, with **~0.98–2.00m actual height gained**.
+- **83/83** `[CGS FLOOR TP VERIFY]` entries show `moved=1`;
+  no `moved=0`, `accepted=0`, or `[CGS FLOOR LOOP] Cancel`.
+- **No** false `Player left exit area` events, and no
+  `Descent rearmed EARLY` events.
+- Measured downward speed was **4.49–9.69m/s**; launch velocity was
+  capped at **7m/s**. More than 7m/s falling is not a launch-cap bug:
+  the character gains downward speed again from real gravity.
+- The log ends when I reload Workbench, not due to a logged portal crash.
+  No Game script compile error is visible in the supplied log.
+
+**What is not solved:** the player still moves upward in small host-local
+`SCR_Global.TeleportLocalPlayer` jumps at 75ms intervals, up to
+0.28m per request. The elapsed trajectory can undershoot its ideal
+ballistic apex (~2.0m observed versus ~2.5m expected at 7m/s).
+It is **not native continuous character velocity**. I want a genuine
+smooth flight controller in the next major phase; I do NOT want to
+replace a verified loop with speculative untested velocity setters.
+
+### Newly isolated portal PIP flicker (next draft PR #67)
+
+My 06:29 log shows the PIP camera slots FLIP when Blue and Orange
+swap which is nearer to the viewer:
+
+```text
+[CGS GUN PIP] LIVE owner=1 color=0 ... slot=27
+[CGS GUN PIP] LIVE owner=1 color=1 ... slot=26
+[CGS GUN PIP] STOP owner=1 color=1 released slot=26
+[CGS GUN PIP] STOP owner=1 color=0 released slot=27
+[CGS GUN PIP] LIVE owner=1 color=0 ... slot=26
+[CGS GUN PIP] LIVE owner=1 color=1 ... slot=27
+```
+
+In `Scripts/Game/CGS_Portal/CGS_PortalPIPLiveComponent.c`,
+`RefreshLocalRenderSelection()` sorts by distance every 450ms,
+assigning camera slots **26** and **27** by rank. Crossing between the
+same two portals reverses rank. It needlessly invokes `StopRender()`
+for BOTH live cameras, deletes their render targets, and waits
+`WARMUP_MS=1500` before recreating them. That is a concrete,
+code-supported source of PIP blackouts/changes.
+
+**Draft PR #67** keeps each slot unchanged when the **same two**
+portals remain selected, even if their nearest/farthest order
+reverses. I am **not** changing which two portals qualify to render
+or altering any teleport/flight/cube code. This is source-reviewed
+but awaits Workbench compilation and visual confirmation.
+
+**Acceptance:** with both portals visible, run at least 3 full
+floor loops. Expect Blue/Orange live feeds to retain their slot
+assignments and have **no repeated `STOP`/`LIVE` pairs solely from
+rank swapping**. Both feeds should still update with the correct
+partner view. Replacing a portal, going out of render range, or
+destroying it may legitimately stop a PIP pass. If screens still
+flicker while camera slots stay fixed, investigate HDR matching,
+layout/material reset, and 12 FPS capture separately.
 
 ## What is proven working — do NOT regress
 
@@ -43,7 +110,7 @@ Supplied locally in the preceding conversation:
 - PIP: roughly 6 LIVE and 6 STOP log events in the session. Video frames alternate lighting/brightness during Workbench movement and the user reports jitter. This could involve character teleport pulses, PIP camera/HDR exposure, or Workbench transitions. **Do not claim the exact visual flicker mechanism is proven solely by this log/video.**
 - No Game script compile errors or `CGS FLOOR LOOP Cancel` errors appeared in that supplied log. Its absence does not mean gameplay is smooth.
 
-## Pending focused near-surface fix (new branch)
+## Previous near-surface fix — PR #66 MERGED AND TESTED (historical design notes)
 
 I deliberately scoped this change narrowly to the confirmed abrupt midair return, leaving the successful flight system unchanged.
 
@@ -74,7 +141,7 @@ I deliberately scoped this change narrowly to the confirmed abrupt midair return
 
 ## Important PR chronology
 
-All **merged to main** at handoff: **#55** grab/throw; **#56** prop portal prototype; **#57–#59** floor/slope prop crossing diagnostics; **#60** working GenericEntity cube transfer; **#61** offline floor bounce prototype; **#62** wait for owner/player arrival; **#63** direct transform experiment (failed in runtime); **#64** working owner-local teleport pulse flight; **#65** observed-fall-based exit re-arm. Keep new work as **separate draft PR** until Workbench confirms it.
+All **merged to main** at latest retest: **#55** grab/throw; **#56** prop portal prototype; **#57–#59** floor/slope prop crossing diagnostics; **#60** working GenericEntity cube transfer; **#61** offline floor bounce prototype; **#62** wait for owner/player arrival; **#63** direct transform experiment (failed in runtime); **#64** working owner-local teleport pulse flight; **#65** observed-fall-based exit re-arm; **#66** tested near-surface capture and lateral-only escape. **#67** is the pending isolated PIP stability proposal. Keep new work as **separate draft PR** until Workbench confirms it.
 
 ## Next Workbench checks
 
