@@ -28,6 +28,15 @@ class CGS_PortalMomentumState : Managed
 	// all-axis correction or banks momentum from another transfer.
 	bool m_bSafeFloorLoop;
 	vector m_vLoopStart;
+
+	// Player teleports through SCR_Global can complete AFTER the
+	// server TryTransfer returns. Do not start movement at the OLD
+	// portal and mistake the engine teleport for player escape.
+	bool m_bFloorLoopPendingArrival;
+	vector m_vExpectedFloorExit;
+	int m_iFloorArrivalTimeoutMs;
+	int m_iFloorArrivalSamples;
+	int m_iFloorLiftDurationMs;
 }
 
 //------------------------------------------------------------------------------------------------
@@ -97,7 +106,7 @@ class CGS_PortalMomentumService
 	// OFFLINE ONLY. Unlike the old high-speed all-axis virtual momentum,
 	// this is a small, time-bounded VERTICAL lift after a safe teleport.
 	// It stops at the apex and hands falling/walking back to Reforger.
-	static void StartFloorLoop(IEntity character, float upwardSpeed, float timeoutSeconds, bool debugLog)
+	static void StartFloorLoop(IEntity character, vector expectedExit, float upwardSpeed, float timeoutSeconds, bool debugLog)
 	{
 		if (!Replication.IsServer() || Replication.IsRunning() || !character)
 			return;
@@ -112,11 +121,20 @@ class CGS_PortalMomentumService
 				continue;
 
 			state.m_bSafeFloorLoop = true;
-			state.m_vLoopStart = character.GetOrigin();
+			state.m_bFloorLoopPendingArrival = true;
+			state.m_vExpectedFloorExit = expectedExit;
+			state.m_vLoopStart = expectedExit;
+			state.m_iFloorArrivalSamples = 0;
+			state.m_iFloorLiftDurationMs = Math.Round(safeTime * 1000);
+			state.m_iFloorArrivalTimeoutMs = state.m_iArmedAtMs + 650;
+			// The flight timeout starts AFTER the character actually
+			// arrives. Until then only wait for the safe teleport to
+			// resolve, without forcing movement at the old location.
+			state.m_iExpireMs = state.m_iFloorArrivalTimeoutMs + 1;
 			state.m_bDebug = debugLog;
 			if (debugLog)
-				PrintFormat("[CGS FLOOR LOOP] Start character=%1 upward=%2 durationLimit=%3",
-					character, safeSpeed, safeTime);
+				PrintFormat("[CGS FLOOR LOOP] Pending arrival character=%1 old=%2 expectedExit=%3 upward=%4",
+					character, character.GetOrigin(), expectedExit, safeSpeed);
 			return;
 		}
 	}
@@ -248,6 +266,52 @@ class CGS_PortalMomentumService
 					s_aActive.RemoveOrdered(i);
 					continue;
 				}
+			}
+
+			if (state.m_bSafeFloorLoop && state.m_bFloorLoopPendingArrival)
+			{
+				// This is the SAME asynchronous teleport observed in the
+				// user's offline Workbench log: old location immediately,
+				// correct destination around the following frame(s).
+				if (now >= state.m_iFloorArrivalTimeoutMs)
+				{
+					if (state.m_bDebug)
+						PrintFormat("[CGS FLOOR LOOP] Cancel: teleport arrival timeout. expected=%1 actual=%2",
+							state.m_vExpectedFloorExit, character.GetOrigin());
+					s_aActive.RemoveOrdered(i);
+					continue;
+				}
+
+				vector arrivalDelta = character.GetOrigin() - state.m_vExpectedFloorExit;
+				// The native character controller may settle 0.6-0.8m
+				// lower than the requested teleport origin. Check X/Z
+				// more strictly, and allow a short vertical settle.
+				if (Math.AbsFloat(arrivalDelta[0]) > 0.85 ||
+					Math.AbsFloat(arrivalDelta[2]) > 0.85 ||
+					Math.AbsFloat(arrivalDelta[1]) > 1.65)
+				{
+					state.m_iFloorArrivalSamples = 0;
+					continue;
+				}
+
+				// Require two near-exit samples, so a single transient
+				// transform does not become the flight anchor.
+				state.m_iFloorArrivalSamples++;
+				if (state.m_iFloorArrivalSamples < 2)
+					continue;
+
+				// IMPORTANT: record the position AFTER teleport. The
+				// old version used the SOURCE location and immediately
+				// canceled when the player moved >3m toward the exit.
+				state.m_bFloorLoopPendingArrival = false;
+				state.m_vLoopStart = character.GetOrigin();
+				state.m_iLastTickMs = now;
+				state.m_iArmedAtMs = now;
+				state.m_iExpireMs = now + state.m_iFloorLiftDurationMs;
+				if (state.m_bDebug)
+					PrintFormat("[CGS FLOOR LOOP] Start AFTER ARRIVAL character=%1 origin=%2 expected=%3 upward=%4",
+						character, state.m_vLoopStart, state.m_vExpectedFloorExit, state.m_vVirtualVelocity[1]);
+				continue;
 			}
 
 			int elapsedMs = now - state.m_iLastTickMs;
