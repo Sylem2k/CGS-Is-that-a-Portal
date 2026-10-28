@@ -101,21 +101,43 @@ class CGS_PortalPropTransferService
 					faceEntry = true;
 			}
 
-			// A cube resting on a road often has its *origin* a few
-			// centimeters below our floating portal face (observed in
-			// the Workbench log). A sideways sliding cube must therefore
-			// enter by crossing the footprint boundary at ground level.
-			if (!faceEntry && sourceNormal[1] > 0.75 && currentInside && previousOutside)
+			// Sloped ground has a tilted normal. A cube thrown toward
+			// the tilted opening often starts WITHIN the opening bounds
+			// and hits the underlying terrain before the former
+			// previousOutside/currentInside test becomes true. Detect
+			// inward motion even if it was already inside on the first
+			// post-throw sample, but never accept stationary proximity.
+			bool floorApproach = false;
+			if (!faceEntry && sourceNormal[1] > 0.65 && currentInside)
 			{
-				float sidewaysSpeedSq = velocity.LengthSq() - closingSpeed * closingSpeed;
-				if (currentDepth >= -0.50 && currentDepth <= 1.40 &&
-					previousDepth >= -0.50 && previousDepth <= 1.50 &&
-					sidewaysSpeedSq >= 0.64 && displacement.LengthSq() >= 0.0004)
+				float sidewaysSpeedSq = Math.Max(0, velocity.LengthSq() - closingSpeed * closingSpeed);
+				bool nearSurface = currentDepth >= -0.65 && currentDepth <= 1.55 &&
+					previousDepth >= -0.65 && previousDepth <= 1.75;
+				bool movingIntoSurface = closingSpeed < -0.65 && previousDepth > currentDepth + 0.003;
+				bool slidingAcross = previousOutside && sidewaysSpeedSq >= 0.64 &&
+					displacement.LengthSq() >= 0.0004;
+
+				if (nearSurface && (movingIntoSurface || slidingAcross))
+				{
 					floorSlide = true;
+					floorApproach = movingIntoSurface;
+				}
 			}
 
 			if (!faceEntry && !floorSlide)
+			{
+				if ((source.IsDebugEnabled() || destination.IsDebugEnabled()) &&
+					grabbable.ShouldLogPortalWatch(nowMs))
+					PrintFormat("[CGS PORTAL PROP CHECK] source=%1 prop=%2 depth=%3 prevDepth=%4 side=%5 up=%6 prevOutside=%7 currentInside=%8 closing=%9 velocity=%10 floorNormalY=%11",
+						source.GetPortalID(), prop, currentDepth, previousDepth, currentSide, currentUp,
+						previousOutside, currentInside, closingSpeed, velocity, sourceNormal[1]);
 				continue;
+			}
+
+			if ((source.IsDebugEnabled() || destination.IsDebugEnabled()) &&
+				grabbable.ShouldLogPortalWatch(nowMs))
+				PrintFormat("[CGS PORTAL PROP CANDIDATE] source=%1 exit=%2 depth=%3 faceEntry=%4 floorSlide=%5 inward=%6 pos=%7",
+					source.GetPortalID(), destination.GetPortalID(), currentDepth, faceEntry, floorSlide, floorApproach, currentPos);
 
 			if (TransferProp(grabbable, prop, physics, velocity, source, destination, nowMs, floorSlide))
 				return true;
