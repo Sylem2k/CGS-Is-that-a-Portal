@@ -2,6 +2,26 @@
 
 > **Latest handoff (2026-10-28):** [CGS_Portal_Development_Handoff_20261028.md](CGS_Portal_Development_Handoff_20261028.md) is the current source of truth. Previous investigation notes below are retained for history, including failed experimental movement paths.
 
+## Verified results — Workbench 2026-10-28 06:29
+
+I verified the PR #66 near-surface catch fix in offline Workbench
+(`Pasted text(20261028-062946).txt`). The runtime contains **11 real
+automatic FALL_ZONE successes**, **11 near-surface re-arms** at
+**0.878–1.012m** (average **0.939m**), and **11 actual airborne apexes**.
+All **83** upward teleport-pulse movement checks returned `moved=1`.
+There were NO logged premature 2.7m returns, sideways escape errors,
+or floor-loop cancellations.
+
+This confirms that the former 2.6–2.7m mid-air catch was solved.
+I still have **stepped upward flight** because the only verified
+host-player movement driver sends 75ms local teleport pulses.
+
+**Next independent visual problem:** the LIVE/STOP portal PIP cameras
+swap slots 26/27 when distance ordering reverses during a loop.
+My next isolated PR stabilizes the slots for the same selected pair.
+I must test it separately without editing the working gravity loop.
+See the full `CGS_Portal_Development_Handoff_20261028.md`.
+
 ## 2026-10-28 near-surface catch / smoother return test
 
 I have confirmed **real upward player movement and repeated automatic FALL_ZONE loops**, but the latest video still looks glitchy. The 20261028-062048 log contains 43 apex events, 15 measured early return re-arms all around depth **2.56–2.70m**, and 27 `Player left exit area` events (often immediately after apex). My old re-arm check treated rising ABOVE the fall zone like a sideways escape, and it rearmed/caught returning players far above the portal oval.

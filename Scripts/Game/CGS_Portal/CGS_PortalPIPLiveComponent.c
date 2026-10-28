@@ -211,9 +211,27 @@ class CGS_PortalPIPLiveComponent : ScriptComponent
 			}
 		}
 
-		// Stop prior pass(es) BEFORE reusing their camera slot(s).
-		// Swapping the rank of two portals also changes their camera
-		// slots, so each portal changing rank must release its old pass.
+		// Keep camera slots STABLE while the SAME two portals remain
+		// selected. Distance order flips on every Blue <-> Orange
+		// player teleport; previously this swapped slots 26/27,
+		// deleted both ScriptCameras and render targets, then waited
+		// WARMUP_MS (1500ms) before rebuilding their live views.
+		// The resulting LIVE -> STOP -> LIVE cycle is visible in
+		// the 2026-10-28 Workbench log and contributes to flicker.
+		//
+		// The distance ranking still decides WHICH two portals
+		// render. Only their already assigned slots stay unchanged
+		// when their nearest/farthest order reverses.
+		if (s_pBestFirst && s_pBestSecond &&
+			first == s_pBestSecond && second == s_pBestFirst)
+		{
+			CGS_PortalPIPLiveComponent previousSecond = first;
+			first = second;
+			second = previousSecond;
+		}
+
+		// Stop prior passes only when the actual selected portal
+		// changes, NOT when the same pair merely swaps distance rank.
 		if (s_pBestFirst && s_pBestFirst != first)
 			s_pBestFirst.StopRender();
 
