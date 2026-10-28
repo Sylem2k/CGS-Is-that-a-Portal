@@ -30,6 +30,7 @@ class CGS_GrabbableComponent : ScriptComponent
 	protected vector m_vPreviousPropPosition;
 	protected int m_iPreviousPropSampleMs;
 	protected bool m_bHasPreviousPropPosition;
+	protected int m_iLastBlockedPortalLogMs = -10000;
 
 	// This state is only read and changed by the authoritative server.
 	// Do not replicate it as a writable client variable.
@@ -110,6 +111,17 @@ class CGS_GrabbableComponent : ScriptComponent
 		// Still standing/falling inside the opening we exited from.
 		// Do not re-enter until the physical prop leaves that area.
 		return entry == m_pProtectedExit;
+	}
+
+	// Failed exit clearance can be tested many times while a cube is
+	// pushing against the portal. Log at most once per second per prop.
+	bool ShouldLogPortalBlocked(int nowMs)
+	{
+		if (nowMs - m_iLastBlockedPortalLogMs < 1000)
+			return false;
+
+		m_iLastBlockedPortalLogMs = nowMs;
+		return true;
 	}
 
 	void ServerRecordPortalExit(CGS_PortalComponent destination, int nowMs)
