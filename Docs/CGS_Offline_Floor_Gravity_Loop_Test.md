@@ -185,6 +185,64 @@ the request, since teleport is asynchronous.
 7. **No multiplayer testing yet**; this mode never runs in MP.
    Report the PULSE / VERIFY logs if flight is not visible.
 
+## Oct 28, 06:15 — successful launch, intermittently missed return
+
+The supplied `Pasted text(20261028-061505).txt` establishes the first
+**real observed upward player flight**:
+
+- Host-local movement uses `SCR_Global.TeleportLocalPlayer` pulses.
+- Repeated `[CGS FLOOR TP VERIFY] ... moved=1 failures=0`.
+- `[CGS FLOOR LOOP] Apex` reports real ascent:
+  `startY=7.18912 peakObservedY=8.16911 expectedApexY=8.22123`
+  (+0.98m); after a 5.511m/s falling entry, another launch reaches
+  `startY=7.18911 peakObservedY=8.68911 expectedApexY=8.73714`
+  (+1.50m).
+- Confirmed first automatic **FALL_ZONE** transfer (Blue -> Orange)
+  after falling downward at 3.633m/s. A later return fall reaches
+  5.511m/s and the new launch respects that speed.
+- However **some** returns, especially above Orange, still reach the
+  backing road without transferring. Those logs only show
+  `Exit rearmed for descent ... depth=-0.04 elapsed=1500`.
+  This is **too late**, because the player is already at ground level.
+
+### Root cause and fix
+
+`CGS_PortalTransferComponent.IsExitEntrySuppressed` relied on
+`CharacterController.GetVelocity()[1] < -0.35`. The same log explicitly
+shows `falling=1 controller=<0,0,0> observed=<0,-5.51112,0>`.
+Thus the engine controller sometimes reports zero fall speed, even when
+the portal's own multi-frame position observation proves freefall.
+
+This PR:
+1. Exposes `IsCharacterDescending` using the existing portal
+   observed-position speed (80+ ms samples and short recent-fall cache).
+2. While `CGS_PortalMomentumService.IsFloorLoopActive` is true,
+   **never** prematurely clear exit protection due to small
+   downward corrections between upward pulses.
+3. Once the launch stops and the player is actually descending faster
+   than 0.65 m/s, rearm as they pass within the fall catch prism,
+   a little below its top but safely above solid ground.
+   Each portal retains its existing fall-zone height (Blue 2m, Orange 3.5m).
+4. Keep an explicit 1600ms timeout only as a FAILSAFE,
+   and label it `fall missed` rather than claiming a real loop.
+5. Multiplayer remains unchanged because the branch is guarded by
+   `!Replication.IsRunning()`. No edits to cube, input, gun or flight.
+
+### Focused retest
+
+1. Compile this branch; place two FLOOR portals pointing UP as before.
+2. Walk onto Blue. Expect `[CGS FLOOR TP VERIFY] moved=1`, then
+   `[CGS FLOOR LOOP] Apex`, then **`Descent rearmed EARLY`**
+   while depth is still positive (ideally 1–2.7m, never -0.04m).
+3. Expect automatic `[CGS PORTAL] ... entry=FALL_ZONE` before landing,
+   then another upward launch from the partner.
+4. Let go of WASD and observe two or three complete consecutive loops.
+   Moving sideways intentionally should interrupt the loop naturally.
+5. If the debug instead says `Exit rearmed by timeout ... (fall missed)`,
+   attach that excerpt, including the prior Apex and current near-depth.
+6. Throw the cube with F+V and test wall portals to confirm unchanged
+   behavior. Dedicated MP intentionally deferred.
+
 ## Workbench test — player (not the cube)
 
 1. Sync test branch, compile Game scripts and load the same `unnamed.ent` test world.
