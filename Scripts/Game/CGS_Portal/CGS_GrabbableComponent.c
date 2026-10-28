@@ -32,6 +32,13 @@ class CGS_GrabbableComponent : ScriptComponent
 	protected bool m_bHasPreviousPropPosition;
 	protected int m_iLastBlockedPortalLogMs = -10000;
 	protected int m_iLastPortalWatchLogMs = -10000;
+
+	// An inward-moving cube can collide with the SOLID terrain behind
+	// an opening before its origin crosses the portal plane. Cache a
+	// verified approaching rigidbody velocity for a short contact window.
+	protected CGS_PortalComponent m_pApproachPortal;
+	protected vector m_vApproachVelocity;
+	protected int m_iApproachExpiresMs = -10000;
 	protected bool m_bPortalTickReported;
 
 	// This state is only read and changed by the authoritative server.
@@ -132,6 +139,35 @@ class CGS_GrabbableComponent : ScriptComponent
 		return true;
 	}
 
+	// Mark a projected collision with the opening BEFORE a solid
+	// wall/slope steals the cube's velocity. Purely authoritative.
+	void ServerRememberPortalApproach(CGS_PortalComponent source, vector incoming, int nowMs)
+	{
+		if (!Replication.IsServer() || !source || incoming.LengthSq() < 0.64)
+			return;
+
+		m_pApproachPortal = source;
+		m_vApproachVelocity = incoming;
+		m_iApproachExpiresMs = nowMs + 450;
+	}
+
+	bool ServerGetRecentPortalApproach(CGS_PortalComponent source, int nowMs, out vector incoming)
+	{
+		incoming = vector.Zero;
+		if (!Replication.IsServer() || !source || source != m_pApproachPortal || nowMs > m_iApproachExpiresMs)
+			return false;
+
+		incoming = m_vApproachVelocity;
+		return incoming.LengthSq() >= 0.64;
+	}
+
+	void ServerClearPortalApproach()
+	{
+		m_pApproachPortal = null;
+		m_vApproachVelocity = vector.Zero;
+		m_iApproachExpiresMs = -10000;
+	}
+
 	// Failed exit clearance can be tested many times while a cube is
 	// pushing against the portal. Log at most once per second per prop.
 	bool ShouldLogPortalBlocked(int nowMs)
@@ -150,6 +186,7 @@ class CGS_GrabbableComponent : ScriptComponent
 
 		m_pProtectedExit = destination;
 		m_iLastPortalTransferMs = nowMs;
+		ServerClearPortalApproach();
 	}
 
 	bool ServerTryClaim(int playerId)
@@ -172,6 +209,7 @@ class CGS_GrabbableComponent : ScriptComponent
 			return false;
 
 		m_iGrabbedByPlayer = playerId;
+		ServerClearPortalApproach();
 		return true;
 	}
 
