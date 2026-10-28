@@ -387,6 +387,37 @@ class CGS_PortalComponent : ScriptComponent
 		return downwardSpeed > 0.65;
 	}
 
+	// For an OFFLINE floor-loop exit, vertical height is NOT a reason
+	// to re-arm. When the player rises ABOVE a portal's wide catch
+	// prism, they will fall BACK into it. Re-arming while they are
+	// still ascending lets FALL_ZONE catch them high in midair.
+	// Check only the horizontal/portal-plane footprint when deciding
+	// whether a player intentionally moved sideways to escape.
+	bool IsWithinExitCatchFootprint(vector worldPosition)
+	{
+		IEntity portalEntity = GetOwner();
+		if (!portalEntity)
+			return false;
+
+		vector portalRight;
+		vector portalUp;
+		vector portalNormal;
+		GetPortalBasis(portalRight, portalUp, portalNormal);
+		vector delta = worldPosition - portalEntity.GetOrigin();
+
+		float halfWidth = m_fHalfWidth;
+		float halfHeight = m_fHalfHeight;
+		if (m_bFallCatchAssist && portalNormal[1] > 0.75)
+		{
+			halfWidth = Math.Max(halfWidth, m_fFallCatchHalfWidth);
+			halfHeight = Math.Max(halfHeight, m_fFallCatchHalfLength);
+		}
+
+		float side = Math.AbsFloat(vector.Dot(delta, portalRight));
+		float up = Math.AbsFloat(vector.Dot(delta, portalUp));
+		return side <= halfWidth + 0.65 && up <= halfHeight + 0.65;
+	}
+
 	// Whether this point is still inside this portal's FULL catch area.
 	// This is used ONLY to re-arm an exit portal after its traveller
 	// actually departs the area. It does not change entry detection.
