@@ -108,6 +108,11 @@ class CGS_PortalComponent : ScriptComponent
 	[Attribute("0", UIWidgets.CheckBox, "OFFLINE EXPERIMENT: adaptive smaller floor-flight pulses; auto fallback to known-good mode")]
 	protected bool m_bAdaptiveFloorFlight;
 
+	// Diagnostic only: samples the native view and character locations
+	// without moving/rotating the camera or modifying player input.
+	[Attribute("0", UIWidgets.CheckBox, "OFFLINE TEST: measure camera/character motion during floor flight")]
+	protected bool m_bFlightCameraQualityProbe;
+
 	[Attribute("1", UIWidgets.CheckBox, "Safe player teleport: use Reforger SCR_Global.TeleportPlayer (resets velocity)")]
 	protected bool m_bUseSafePlayerTeleport;
 
@@ -212,6 +217,11 @@ class CGS_PortalComponent : ScriptComponent
 	bool IsAdaptiveFloorFlightEnabled()
 	{
 		return m_bAdaptiveFloorFlight;
+	}
+
+	bool IsFlightCameraQualityProbeEnabled()
+	{
+		return m_bFlightCameraQualityProbe;
 	}
 
 	float GetFloorFallCatchHeight()

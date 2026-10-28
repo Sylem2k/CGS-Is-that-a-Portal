@@ -29,6 +29,7 @@ GenericEntity {
    m_fExitLateralScale 0
    m_bFloorGravityLoop 1
    m_bAdaptiveFloorFlight 1
+   m_bFlightCameraQualityProbe 1
    m_fFloorLoopMinSpeed 4.5
    m_fFloorLoopMaxSpeed 7
    m_fFloorLoopTimeout 1.5

@@ -552,7 +552,8 @@ class CGS_PortalTransferComponent : ScriptComponent
 			CGS_PortalMomentumService.StartFloorLoop(
 				character, destinationPosition, outgoingVelocity[1], destination.GetFloorLoopTimeout(),
 				source.IsDebugEnabled() || destination.IsDebugEnabled(),
-				destination.IsAdaptiveFloorFlightEnabled());
+				destination.IsAdaptiveFloorFlightEnabled(),
+				destination.IsFlightCameraQualityProbeEnabled());
 		}
 		else if (destination.ShouldSimulateMomentum())
 		{
