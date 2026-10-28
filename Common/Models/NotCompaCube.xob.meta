@@ -14,9 +14,9 @@ MetaFileClass {
    }
    GeometryParams {
     GeometryParam UBX_Cube {
-     LayerPreset "PropFireView"
+     LayerPreset "Prop"
      SurfaceProperties {
-      "{536BF67B2052B869}material/metal.gamemat"
+      "{CE9253778DD8FBDE}Common/Materials/Game/metal.gamemat"
      }
      Mass 0
      Margin 0
